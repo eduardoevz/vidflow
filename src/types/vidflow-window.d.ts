@@ -1,0 +1,9 @@
+import type { VidFlowApi } from '../../shared/ipc-contract';
+
+declare global {
+  interface Window {
+    vidflow: VidFlowApi;
+  }
+}
+
+export {};
