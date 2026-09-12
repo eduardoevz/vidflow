@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import type { DownloadProgress, DownloadRecord, DownloadRequest, DownloadStatus } from '../../../shared/download-types';
 import type { DownloadsRepo } from '../database/downloadsRepo';
 import type { HistoryRepo } from '../database/historyRepo';
@@ -161,6 +162,20 @@ export class DownloadManager {
         );
         task.handle = download.handle;
         await download;
+
+        // yt-dlp exits 0 even when it silently skipped merging (e.g. FFmpeg
+        // missing from the --ffmpeg-location it was given) — it just leaves
+        // the separate .fXXX fragment files instead of the merged output.
+        // Trusting the exit code alone would report a broken download as
+        // "completed" pointing at a file that doesn't exist.
+        if (!fs.existsSync(task.destinationPath)) {
+          this.cleanupYtDlpFragments(task.destinationPath);
+          throw new Error(
+            task.request.audioFormatId
+              ? 'La descarga terminó pero no se pudo combinar video y audio (¿falta FFmpeg?).'
+              : 'La descarga terminó pero el archivo final no se encontró.',
+          );
+        }
       } else {
         if (!task.request.downloadUrl) {
           throw new Error('downloadUrl es requerido para descargas fuera de yt-dlp');
@@ -229,6 +244,27 @@ export class DownloadManager {
         this.deps.downloadsRepo.markFailed(task.downloadId, message);
       }
       this.emit(task, { errorMessage: task.status === 'failed' ? message : undefined });
+    }
+  }
+
+  /** Removes yt-dlp's per-stream fragments (e.g. "name.f160.mp4", "name.f140.m4a") left behind when a merge was skipped or failed. */
+  private cleanupYtDlpFragments(destinationPath: string): void {
+    const dir = path.dirname(destinationPath);
+    const base = path.basename(destinationPath, path.extname(destinationPath));
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.startsWith(`${base}.f`) && /\.f\d+\.\w+$/.test(entry)) {
+        try {
+          fs.unlinkSync(path.join(dir, entry));
+        } catch {
+          // best-effort cleanup
+        }
+      }
     }
   }
 

@@ -25,6 +25,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "adm-zip": "^0.6.1",
     "better-sqlite3": "^11.3.0",
     "gsap": "^3.12.5",
     "hls.js": "^1.5.15",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
+    "@types/adm-zip": "^0.5.8",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.7.4",
     "@types/react": "^18.3.11",

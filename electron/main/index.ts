@@ -94,6 +94,15 @@ async function main(): Promise<void> {
   } catch (err) {
     logger.error('main', 'Failed to ensure yt-dlp is installed', { error: (err as Error).message });
   }
+  try {
+    // First run only: downloads a managed FFmpeg build if none is found on
+    // PATH — without this, yt-dlp silently leaves video/audio unmerged
+    // (it exits 0 even when merging was impossible) rather than failing
+    // loudly, so this must complete before any download can be trusted.
+    await engineManager.ensureFfmpeg();
+  } catch (err) {
+    logger.error('main', 'Failed to ensure FFmpeg is installed', { error: (err as Error).message });
+  }
 
   const mediaAnalyzer = new MediaAnalyzer([
     new YtDlpAdapter(engineManager.resolvedYtDlpPath()),
