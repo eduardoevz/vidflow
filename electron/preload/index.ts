@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC_CHANNELS } from '../main/ipc/channels';
+import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { VidFlowApi } from '../../shared/ipc-contract';
 
 const api: VidFlowApi = {
