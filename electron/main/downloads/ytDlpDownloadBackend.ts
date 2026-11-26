@@ -22,6 +22,11 @@ export interface YtDlpDownloadOptions {
   concurrentFragments: number;
   extractAudioOnly: boolean;
   audioFormat?: string; // e.g. "mp3", "m4a", "opus" when extractAudioOnly
+  /** When set, delegates the actual byte-fetching to aria2c for faster, multi-connection downloads. */
+  externalDownloader?: { path: string; connections: number };
+  cookiesFilePath?: string;
+  userAgent?: string;
+  referer?: string;
 }
 
 export function startYtDlpDownload(
@@ -36,8 +41,13 @@ export function startYtDlpDownload(
     '--concurrent-fragments', String(options.concurrentFragments),
     '--ffmpeg-location', options.ffmpegPath,
     '-o', options.outputTemplate,
-    options.url,
   ];
+
+  if (options.cookiesFilePath) args.push('--cookies', options.cookiesFilePath);
+  if (options.userAgent) args.push('--user-agent', options.userAgent);
+  if (options.referer) args.push('--referer', options.referer);
+
+  args.push(options.url);
 
   if (options.extractAudioOnly) {
     args.push('-f', 'bestaudio/best', '--extract-audio');
@@ -46,6 +56,14 @@ export function startYtDlpDownload(
     }
   } else {
     args.push('-f', options.formatSelector, '--merge-output-format', options.mergeOutputFormat);
+  }
+
+  if (options.externalDownloader) {
+    args.push('--downloader', options.externalDownloader.path);
+    args.push(
+      '--downloader-args',
+      `aria2c:-x ${options.externalDownloader.connections} -s ${options.externalDownloader.connections} -k 1M`,
+    );
   }
 
   const child = spawnSafe(options.ytDlpPath, args);

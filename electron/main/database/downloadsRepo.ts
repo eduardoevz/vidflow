@@ -117,10 +117,11 @@ export class DownloadsRepo {
     return row ? toDownloadRecord(row) : undefined;
   }
 
+  /** Downloads worth showing on the Descargas screen: still in progress, or failed (actionable via retry/dismiss). */
   listActive(): DownloadRecord[] {
     const rows = this.db
       .prepare(
-        `${JOIN_SELECT} WHERE d.status IN ('queued','analyzing','downloading','paused','merging','processing') ORDER BY d.created_at ASC`,
+        `${JOIN_SELECT} WHERE d.status IN ('queued','analyzing','downloading','paused','merging','processing','failed') ORDER BY d.created_at ASC`,
       )
       .all() as DownloadJoinRow[];
     return rows.map(toDownloadRecord);
@@ -129,5 +130,25 @@ export class DownloadsRepo {
   listAll(): DownloadRecord[] {
     const rows = this.db.prepare(`${JOIN_SELECT} ORDER BY d.created_at DESC`).all() as DownloadJoinRow[];
     return rows.map(toDownloadRecord);
+  }
+
+  delete(id: number): void {
+    this.db.prepare('DELETE FROM downloads WHERE id = ?').run(id);
+  }
+
+  /**
+   * Called once at startup: any row still in a non-terminal status is left
+   * over from a previous session that ended without a live task driving it
+   * (crash, force-quit) — mark it failed so it doesn't haunt the Descargas
+   * screen as a phantom "active" download forever.
+   */
+  markStaleAsFailed(): void {
+    this.db
+      .prepare(
+        `UPDATE downloads
+         SET status = 'failed', error_message = 'Interrumpida al cerrar la aplicación', updated_at = datetime('now')
+         WHERE status IN ('queued','analyzing','downloading','paused','merging','processing')`,
+      )
+      .run();
   }
 }

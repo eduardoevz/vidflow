@@ -93,6 +93,41 @@ describe('repositories', () => {
     expect(downloadsRepo.findById(downloadId)?.status).toBe('completed');
   });
 
+  it('keeps failed downloads in listActive until explicitly deleted', () => {
+    const mediaItemId = mediaItemsRepo.insert({ originalUrl: 'u', title: 't', source: 's' });
+    const downloadId = downloadsRepo.insert({
+      mediaItemId,
+      formatId: 'f',
+      format: 'mp4',
+      filesizeIsEstimate: false,
+    });
+    downloadsRepo.markFailed(downloadId, 'Network error');
+    const active = downloadsRepo.listActive();
+    expect(active).toHaveLength(1);
+    expect(active[0].status).toBe('failed');
+    expect(active[0].errorMessage).toBe('Network error');
+
+    downloadsRepo.delete(downloadId);
+    expect(downloadsRepo.listActive()).toHaveLength(0);
+    expect(downloadsRepo.findById(downloadId)).toBeUndefined();
+  });
+
+  it('markStaleAsFailed transitions non-terminal downloads to failed at startup', () => {
+    const mediaItemId = mediaItemsRepo.insert({ originalUrl: 'u', title: 't', source: 's' });
+    const downloadId = downloadsRepo.insert({
+      mediaItemId,
+      formatId: 'f',
+      format: 'mp4',
+      filesizeIsEstimate: false,
+    });
+    downloadsRepo.updateProgress(downloadId, 'downloading', 45);
+
+    downloadsRepo.markStaleAsFailed();
+    const record = downloadsRepo.findById(downloadId);
+    expect(record?.status).toBe('failed');
+    expect(record?.errorMessage).toBe('Interrumpida al cerrar la aplicación');
+  });
+
   it('removing a history entry deletes the orphaned media item but not a referenced one', () => {
     const mediaItemId = mediaItemsRepo.insert({ originalUrl: 'u', title: 't', source: 's' });
     const historyId = historyRepo.insert({ mediaItemId, localPath: 'C:/x.mp4', format: 'mp4' });

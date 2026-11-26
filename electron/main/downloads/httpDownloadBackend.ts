@@ -11,11 +11,18 @@ export interface HttpDownloadCallbacks {
   onProgress: (downloadedBytes: number, totalBytes?: number, speedBytesPerSec?: number) => void;
 }
 
+export interface HttpRequestHeaders {
+  userAgent?: string;
+  referer?: string;
+  cookie?: string;
+}
+
 /** Simple resumable HTTP(S) download for direct-media / manifest-derived formats. */
 export function startHttpDownload(
   url: string,
   destinationPath: string,
   callbacks: HttpDownloadCallbacks,
+  requestHeaders?: HttpRequestHeaders,
 ): Promise<void> & { handle: HttpDownloadHandle } {
   let cancelled = false;
   let request: ReturnType<typeof https.get> | undefined;
@@ -24,7 +31,11 @@ export function startHttpDownload(
 
   const promise = new Promise<void>((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    const headers: Record<string, string> = { 'User-Agent': 'VidFlow' };
+    const headers: Record<string, string> = {
+      'User-Agent': requestHeaders?.userAgent ?? 'VidFlow',
+    };
+    if (requestHeaders?.referer) headers.Referer = requestHeaders.referer;
+    if (requestHeaders?.cookie) headers.Cookie = requestHeaders.cookie;
     if (alreadyDownloaded > 0) {
       headers.Range = `bytes=${alreadyDownloaded}-`;
     }

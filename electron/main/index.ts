@@ -19,12 +19,13 @@ import { registerAllIpcHandlers } from './ipc';
 import { IPC_CHANNELS } from './ipc/channels';
 import type { IpcContext } from './ipc/context';
 import { APP_CSP } from './security/csp';
-import { BrowserViewController } from './browser/browserViewController';
+import { BROWSER_PARTITION, BrowserViewController } from './browser/browserViewController';
+import { exportSessionCookiesToNetscapeFile, getCookieHeaderForUrl } from './browser/cookieExporter';
 import { TrayController, defaultTrayIconPath } from './tray/trayController';
 import { notifyDownloadCompleted, notifyDownloadFailed } from './notifications/notify';
 import type { CloseBehavior } from '../../shared/settings-types';
 
-const isDev = !app.isPackaged;
+const isDev = !app.isPackaged && process.env.VIDFLOW_USE_DIST !== '1';
 
 // app.getAppPath() is the project root in dev, and the packaged app root
 // (inside app.asar, which Electron's fs shims read from transparently) once
@@ -82,6 +83,7 @@ async function main(): Promise<void> {
   const db = initDatabase(userDataDir, migrationsDir);
 
   const downloadsRepo = new DownloadsRepo(db);
+  downloadsRepo.markStaleAsFailed();
   const historyRepo = new HistoryRepo(db);
   const mediaItemsRepo = new MediaItemsRepo(db);
   const settingsRepo = new SettingsRepo(db);
@@ -103,12 +105,34 @@ async function main(): Promise<void> {
   } catch (err) {
     logger.error('main', 'Failed to ensure FFmpeg is installed', { error: (err as Error).message });
   }
+  try {
+    // Provisioned eagerly (like yt-dlp/FFmpeg above) so switching to the
+    // aria2 download engine in Ajustes works immediately — purely optional,
+    // downloads still work fine via yt-dlp's native downloader without it.
+    await engineManager.ensureAria2();
+  } catch (err) {
+    logger.error('main', 'Failed to ensure aria2 is installed', { error: (err as Error).message });
+  }
 
-  const mediaAnalyzer = new MediaAnalyzer([
-    new YtDlpAdapter(engineManager.resolvedYtDlpPath()),
-    new GenericMediaDetector(),
-    new ManifestProbe(),
-  ]);
+  const browserSession = session.fromPartition(BROWSER_PARTITION);
+  const mediaAnalyzer = new MediaAnalyzer(
+    [
+      new YtDlpAdapter(engineManager.resolvedYtDlpPath()),
+      new GenericMediaDetector(),
+      new ManifestProbe(),
+    ],
+    async () => {
+      const exported = await exportSessionCookiesToNetscapeFile(browserSession);
+      return {
+        context: {
+          cookiesFilePath: exported?.filePath,
+          userAgent: browserSession.getUserAgent(),
+          getCookieHeader: (targetUrl) => getCookieHeaderForUrl(browserSession, targetUrl),
+        },
+        cleanup: () => exported?.cleanup(),
+      };
+    },
+  );
 
   const mainWindow = await createMainWindow();
 
@@ -124,6 +148,21 @@ async function main(): Promise<void> {
     getConcurrency: () => settingsService.getAll().concurrentDownloads,
     getYtDlpPath: () => engineManager.resolvedYtDlpPath(),
     getFfmpegPath: () => engineManager.resolvedFfmpegPath(),
+    getDownloadEngine: () => settingsService.getAll().downloadEngine,
+    getConnectionsPerDownload: () => settingsService.getAll().connectionsPerDownload,
+    getAria2Path: () => engineManager.resolvedAria2Path(),
+    prepareSessionContext: async (targetUrl) => {
+      const [exported, cookieHeader] = await Promise.all([
+        exportSessionCookiesToNetscapeFile(browserSession),
+        getCookieHeaderForUrl(browserSession, targetUrl),
+      ]);
+      return {
+        cookiesFilePath: exported?.filePath,
+        cookieHeader,
+        userAgent: browserSession.getUserAgent(),
+        cleanup: () => exported?.cleanup(),
+      };
+    },
     onProgress: (progress) => {
       mainWindow.webContents.send(IPC_CHANNELS.downloadProgress, progress);
       if (!settingsService.getAll().notificationsEnabled) return;
@@ -146,6 +185,7 @@ async function main(): Promise<void> {
       const s = settingsService.getAll();
       return { adBlockEnabled: s.adBlockEnabled, trackerBlockEnabled: s.trackerBlockEnabled };
     },
+    (items) => mainWindow.webContents.send(IPC_CHANNELS.browserMediaDetected, items),
   );
 
   const ipcContext: IpcContext = {

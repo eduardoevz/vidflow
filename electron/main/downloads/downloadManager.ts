@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DownloadProgress, DownloadRecord, DownloadRequest, DownloadStatus } from '../../../shared/download-types';
+import type { DownloadEngine } from '../../../shared/settings-types';
 import type { DownloadsRepo } from '../database/downloadsRepo';
 import type { HistoryRepo } from '../database/historyRepo';
 import type { MediaItemsRepo } from '../database/mediaItemsRepo';
 import { renderFilenameTemplate, resolveCollisionFreePath } from './filenameTemplate';
 import { startYtDlpDownload, type RunningDownload } from './ytDlpDownloadBackend';
 import { startHttpDownload, type HttpDownloadHandle } from './httpDownloadBackend';
+import { startAria2Download, type Aria2DownloadHandle } from './aria2DownloadBackend';
 import { extractAudio } from './ffmpegMerger';
 import { getLogger } from '../logging/logger';
 
@@ -19,7 +21,7 @@ interface Task {
   downloadedBytes: number;
   totalBytes?: number;
   destinationPath: string;
-  handle?: RunningDownload | HttpDownloadHandle;
+  handle?: RunningDownload | HttpDownloadHandle | Aria2DownloadHandle;
   lastEmitAt: number;
 }
 
@@ -31,6 +33,16 @@ export interface DownloadManagerDeps {
   getConcurrency: () => number;
   getYtDlpPath: () => string;
   getFfmpegPath: () => string;
+  getDownloadEngine: () => DownloadEngine;
+  getConnectionsPerDownload: () => number;
+  /** undefined when aria2 isn't installed/available — callers must fall back to yt-dlp native. */
+  getAria2Path: () => string | undefined;
+  prepareSessionContext?: (targetUrl: string) => Promise<{
+    cookiesFilePath?: string;
+    cookieHeader?: string;
+    userAgent?: string;
+    cleanup: () => void;
+  }>;
   onProgress: (progress: DownloadProgress) => void;
 }
 
@@ -127,23 +139,50 @@ export class DownloadManager {
     this.deps.downloadsRepo.updateProgress(task.downloadId, 'downloading', 0);
     this.emit(task);
 
+    const engine = this.deps.getDownloadEngine();
+    const aria2Path = engine === 'aria2' ? this.deps.getAria2Path() : undefined;
+    if (engine === 'aria2' && !aria2Path) {
+      logger.warn('downloadManager', 'aria2 seleccionado pero no disponible; usando el motor nativo de yt-dlp', {
+        taskId: task.id,
+      });
+    }
+
+    const targetUrl = task.request.useYtDlp
+      ? task.request.originalUrl
+      : (task.request.downloadUrl ?? task.request.originalUrl);
+    const sessionCtx = this.deps.prepareSessionContext
+      ? await this.deps.prepareSessionContext(targetUrl).catch(() => undefined)
+      : undefined;
+
     try {
-      if (task.request.useYtDlp) {
-        const formatSelector = task.request.audioFormatId
-          ? `${task.request.formatId}+${task.request.audioFormatId}`
-          : task.request.formatId;
+      const isManifestStream =
+        !task.request.useYtDlp &&
+        (task.request.protocol === 'hls' || task.request.protocol === 'dash');
+
+      if (task.request.useYtDlp || isManifestStream) {
+        const formatSelector = task.request.useYtDlp
+          ? task.request.audioFormatId
+            ? `${task.request.formatId}+${task.request.audioFormatId}`
+            : task.request.formatId
+          : 'bestvideo+bestaudio/best';
 
         const download = startYtDlpDownload(
           {
             ytDlpPath: this.deps.getYtDlpPath(),
             ffmpegPath: this.deps.getFfmpegPath(),
-            url: task.request.originalUrl,
+            url: task.request.useYtDlp ? task.request.originalUrl : (task.request.downloadUrl ?? task.request.originalUrl),
             formatSelector,
             outputTemplate: task.destinationPath,
             mergeOutputFormat: task.request.extension,
             concurrentFragments: 4,
             extractAudioOnly: task.request.audioOnly,
             audioFormat: task.request.audioOnly ? task.request.extension : undefined,
+            cookiesFilePath: sessionCtx?.cookiesFilePath,
+            userAgent: sessionCtx?.userAgent,
+            referer: task.request.referer,
+            externalDownloader: aria2Path
+              ? { path: aria2Path, connections: this.deps.getConnectionsPerDownload() }
+              : undefined,
           },
           {
             onProgress: (percent, totalBytes, speed, eta) => {
@@ -185,15 +224,36 @@ export class DownloadManager {
         // FFmpeg — generic/manifest formats never expose an audio-only URL
         // directly, unlike yt-dlp sources.
         const rawTarget = task.request.audioOnly ? `${task.destinationPath}.source` : task.destinationPath;
-        const download = startHttpDownload(task.request.downloadUrl, rawTarget, {
-          onProgress: (downloaded, total, speed) => {
-            task.downloadedBytes = downloaded;
-            task.totalBytes = total;
-            task.progressPercent = total ? (downloaded / total) * 100 : 0;
-            this.deps.downloadsRepo.updateProgress(task.downloadId, 'downloading', task.progressPercent);
-            this.emit(task, { speedBytesPerSec: speed });
-          },
-        });
+        const onHttpProgress = (downloaded: number, total?: number, speed?: number, eta?: number) => {
+          task.downloadedBytes = downloaded;
+          task.totalBytes = total;
+          task.progressPercent = total ? (downloaded / total) * 100 : 0;
+          this.deps.downloadsRepo.updateProgress(task.downloadId, 'downloading', task.progressPercent);
+          this.emit(task, { speedBytesPerSec: speed, etaSeconds: eta });
+        };
+        const download = aria2Path
+          ? startAria2Download(
+              {
+                aria2Path,
+                url: task.request.downloadUrl,
+                destinationPath: rawTarget,
+                connections: this.deps.getConnectionsPerDownload(),
+                userAgent: sessionCtx?.userAgent,
+                referer: task.request.referer,
+                cookie: sessionCtx?.cookieHeader,
+              },
+              { onProgress: onHttpProgress },
+            )
+          : startHttpDownload(
+              task.request.downloadUrl,
+              rawTarget,
+              { onProgress: onHttpProgress },
+              {
+                userAgent: sessionCtx?.userAgent,
+                referer: task.request.referer,
+                cookie: sessionCtx?.cookieHeader,
+              },
+            );
         task.handle = download.handle;
         await download;
 
@@ -244,6 +304,8 @@ export class DownloadManager {
         this.deps.downloadsRepo.markFailed(task.downloadId, message);
       }
       this.emit(task, { errorMessage: task.status === 'failed' ? message : undefined });
+    } finally {
+      sessionCtx?.cleanup();
     }
   }
 
@@ -269,7 +331,12 @@ export class DownloadManager {
   }
 
   private cleanupPartialFile(destinationPath: string): void {
-    for (const candidate of [destinationPath, `${destinationPath}.part`, `${destinationPath}.source`]) {
+    for (const candidate of [
+      destinationPath,
+      `${destinationPath}.part`,
+      `${destinationPath}.source`,
+      `${destinationPath}.aria2`,
+    ]) {
       if (fs.existsSync(candidate)) {
         try {
           fs.unlinkSync(candidate);
@@ -320,7 +387,16 @@ export class DownloadManager {
     this.pump();
   }
 
-  listAll(): DownloadRecord[] {
-    return this.deps.downloadsRepo.listAll();
+  /** Permanently removes a failed (or otherwise terminal) download from the list — never for one still in progress. */
+  dismiss(taskId: string): void {
+    const task = this.tasks.get(taskId);
+    if (task && !['completed', 'failed', 'cancelled'].includes(task.status)) return;
+    this.tasks.delete(taskId);
+    this.deps.downloadsRepo.delete(Number(taskId));
+  }
+
+  /** Only downloads worth showing on Descargas: in progress, or failed (actionable). */
+  listActive(): DownloadRecord[] {
+    return this.deps.downloadsRepo.listActive();
   }
 }
