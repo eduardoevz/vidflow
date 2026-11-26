@@ -16,3 +16,8 @@ export function ffmpegBinaryPath(userDataDir: string): string {
   const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
   return path.join(binDir(userDataDir), exe);
 }
+
+export function aria2BinaryPath(userDataDir: string): string {
+  const exe = process.platform === 'win32' ? 'aria2c.exe' : 'aria2c';
+  return path.join(binDir(userDataDir), exe);
+}

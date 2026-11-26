@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import { spawnSafe } from '../security/spawnSafe';
-import { ffmpegBinaryPath, ytDlpBinaryPath } from './paths';
+import { aria2BinaryPath, ffmpegBinaryPath, ytDlpBinaryPath } from './paths';
 import { downloadLatestYtDlp, getLatestYtDlpVersion } from './ytDlpUpdater';
 import { downloadLatestFfmpeg } from './ffmpegDownloader';
+import { downloadLatestAria2 } from './aria2Downloader';
 import { getLogger } from '../logging/logger';
 import type { EngineVersions } from '../../../shared/ipc-contract';
 
@@ -48,6 +49,8 @@ export class EngineManager {
     return ytDlpBinaryPath(this.userDataDir);
   }
 
+  private systemAria2Available = false;
+
   private get ffmpegPath(): string {
     // Prefer a bundled/managed copy; fall back to a system install on PATH.
     return fs.existsSync(ffmpegBinaryPath(this.userDataDir))
@@ -56,14 +59,21 @@ export class EngineManager {
   }
 
   async getVersions(): Promise<EngineVersions> {
-    const [ytDlp, ffmpeg] = await Promise.all([
+    const managedAria2 = aria2BinaryPath(this.userDataDir);
+    const aria2Target = fs.existsSync(managedAria2) ? managedAria2 : 'aria2c';
+    const [ytDlp, ffmpeg, aria2] = await Promise.all([
       runAndCaptureVersion(this.ytDlpPath, ['--version']),
       runAndCaptureVersion(this.ffmpegPath, ['-version']),
+      runAndCaptureVersion(aria2Target, ['--version']),
     ]);
+    if (aria2 && !fs.existsSync(managedAria2)) {
+      this.systemAria2Available = true;
+    }
     return {
       app: this.appVersion,
       ytDlp,
       ffmpeg: ffmpeg?.split(' ')[2],
+      aria2: aria2?.split(' ')[2],
     };
   }
 
@@ -106,11 +116,35 @@ export class EngineManager {
     await downloadLatestFfmpeg(managedPath);
   }
 
+  /**
+   * Ensures aria2c is available so switching Ajustes → Descargas → Motor de
+   * descarga to "aria2" works immediately rather than blocking the first
+   * download on a multi-MB install. Purely optional — download speed still
+   * falls back to yt-dlp's native downloader if this never succeeds.
+   */
+  async ensureAria2(): Promise<void> {
+    const managedPath = aria2BinaryPath(this.userDataDir);
+    if (fs.existsSync(managedPath)) return;
+    if (await commandExistsOnPath('aria2c', ['--version'])) {
+      this.systemAria2Available = true;
+      return;
+    }
+    await downloadLatestAria2(managedPath);
+  }
+
   resolvedYtDlpPath(): string {
     return this.ytDlpPath;
   }
 
   resolvedFfmpegPath(): string {
     return this.ffmpegPath;
+  }
+
+  /** Returns undefined (not a PATH-name fallback) when aria2 truly isn't available — callers must fall back to yt-dlp native. */
+  resolvedAria2Path(): string | undefined {
+    const managedPath = aria2BinaryPath(this.userDataDir);
+    if (fs.existsSync(managedPath)) return managedPath;
+    if (this.systemAria2Available) return 'aria2c';
+    return undefined;
   }
 }

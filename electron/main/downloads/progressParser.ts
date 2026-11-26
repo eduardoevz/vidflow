@@ -44,3 +44,41 @@ export function parseYtDlpProgressLine(line: string): ParsedProgress | undefined
 
   return { percent, totalBytes, speedBytesPerSec, etaSeconds };
 }
+
+export interface ParsedAria2Progress {
+  downloadedBytes: number;
+  totalBytes?: number;
+  percent?: number;
+  speedBytesPerSec?: number;
+  etaSeconds?: number;
+}
+
+const ETA_UNIT_MULTIPLIERS: Record<string, number> = { s: 1, m: 60, h: 3600 };
+
+/**
+ * Parses aria2c's periodic one-line summary (enabled via
+ * `--summary-interval=1 --console-log-level=notice`), e.g.:
+ * "[#b6a9a6 96KiB/2.3MiB(3%) CN:3 DL:1.1MiB ETA:1s]"
+ * The `(pct%)`, `CN:n` and `ETA:` segments can all be absent (e.g. when the
+ * total size is unknown), so only the leading gid/downloaded/unit is
+ * required for a match.
+ */
+export function parseAria2ProgressLine(line: string): ParsedAria2Progress | undefined {
+  const match =
+    /\[#\w+\s+([\d.]+)(B|KiB|MiB|GiB)(?:\/([\d.]+)(B|KiB|MiB|GiB)\((\d+)%\))?(?:\s+CN:\d+)?(?:\s+DL:([\d.]+)(B|KiB|MiB|GiB))?(?:\s+ETA:(\d+)([hms]))?/.exec(
+      line,
+    );
+  if (!match) return undefined;
+
+  const [, dlVal, dlUnit, totalVal, totalUnit, percentStr, speedVal, speedUnit, etaVal, etaUnit] = match;
+  // dlVal/dlUnit are always captured when the regex matches at all (they are
+  // not inside an optional group), unlike the rest — TS just can't see that.
+  const downloadedBytes = (dlVal && dlUnit ? parseSize(dlVal, dlUnit) : undefined) ?? 0;
+  const totalBytes = totalVal && totalUnit ? parseSize(totalVal, totalUnit) : undefined;
+  const percent = percentStr !== undefined ? Number(percentStr) : undefined;
+  const speedBytesPerSec = speedVal && speedUnit ? parseSize(speedVal, speedUnit) : undefined;
+  const etaSeconds =
+    etaVal && etaUnit ? Number(etaVal) * (ETA_UNIT_MULTIPLIERS[etaUnit] ?? 1) : undefined;
+
+  return { downloadedBytes, totalBytes, percent, speedBytesPerSec, etaSeconds };
+}

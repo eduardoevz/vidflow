@@ -1,79 +1,11 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import https from 'node:https';
 import { getLogger } from '../logging/logger';
+import { httpsGetJson, httpsGetText, downloadToFile, type GithubRelease } from './githubReleaseFetch';
 
 const YTDLP_RELEASE_API = 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest';
 const YTDLP_WINDOWS_ASSET = 'yt-dlp.exe';
 const YTDLP_CHECKSUM_ASSET = 'SHA2-256SUMS';
-
-interface GithubAsset {
-  name: string;
-  browser_download_url: string;
-}
-
-interface GithubRelease {
-  tag_name: string;
-  assets: GithubAsset[];
-}
-
-function httpsGetJson<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`GET ${url} failed with status ${res.statusCode}`));
-          return;
-        }
-        let body = '';
-        res.on('data', (chunk: Buffer) => (body += chunk.toString('utf-8')));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(body) as T);
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error(String(err)));
-          }
-        });
-      })
-      .on('error', reject);
-  });
-}
-
-function httpsGetText(url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          httpsGetText(res.headers.location).then(resolve).catch(reject);
-          return;
-        }
-        let body = '';
-        res.on('data', (chunk: Buffer) => (body += chunk.toString('utf-8')));
-        res.on('end', () => resolve(body));
-      })
-      .on('error', reject);
-  });
-}
-
-function downloadToFile(url: string, destination: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destination);
-    https
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          downloadToFile(res.headers.location, destination).then(resolve).catch(reject);
-          return;
-        }
-        if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`Download failed with status ${res.statusCode}`));
-          return;
-        }
-        res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
-      })
-      .on('error', reject);
-  });
-}
 
 function sha256File(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {

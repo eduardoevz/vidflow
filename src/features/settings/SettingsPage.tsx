@@ -87,6 +87,33 @@ export function SettingsPage(): JSX.Element {
             className="focus-ring rounded-card border border-border bg-surface px-2 py-1 text-sm"
           />
         </label>
+        <label className="flex items-center justify-between text-sm text-content">
+          Motor de descarga
+          <select
+            value={settings.downloadEngine}
+            onChange={(e) => void update({ downloadEngine: e.target.value as typeof settings.downloadEngine })}
+            className="focus-ring rounded-card border border-border bg-surface px-2 py-1 text-sm"
+          >
+            <option value="ytdlp">yt-dlp (predeterminado)</option>
+            <option value="aria2">aria2 (multi-conexión, más rápido)</option>
+          </select>
+        </label>
+        {settings.downloadEngine === 'aria2' && (
+          <label className="flex items-center justify-between text-sm text-content">
+            Conexiones por descarga
+            <select
+              value={settings.connectionsPerDownload}
+              onChange={(e) => void update({ connectionsPerDownload: Number(e.target.value) })}
+              className="focus-ring rounded-card border border-border bg-surface px-2 py-1 text-sm"
+            >
+              {[1, 2, 4, 8, 16].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </SettingsSection>
 
       <SettingsSection title="Navegador">
@@ -132,6 +159,8 @@ export function SettingsPage(): JSX.Element {
           <span className="text-content">{versions?.ytDlp ?? 'No detectado'}</span>
           <span>FFmpeg</span>
           <span className="text-content">{versions?.ffmpeg ?? 'No detectado'}</span>
+          <span>aria2</span>
+          <span className="text-content">{versions?.aria2 ?? 'No detectado'}</span>
         </div>
         <div className="flex gap-2">
           <Button

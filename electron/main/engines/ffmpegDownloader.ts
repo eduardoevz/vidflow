@@ -1,63 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import https from 'node:https';
 import AdmZip from 'adm-zip';
 import { getLogger } from '../logging/logger';
+import { httpsGetJson, downloadToFile, type GithubRelease } from './githubReleaseFetch';
 
 const FFMPEG_RELEASE_API = 'https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest';
 const FFMPEG_ASSET_NAME = 'ffmpeg-master-latest-win64-gpl.zip';
-
-interface GithubAsset {
-  name: string;
-  browser_download_url: string;
-}
-
-interface GithubRelease {
-  assets: GithubAsset[];
-}
-
-function httpsGetJson<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`GET ${url} failed with status ${res.statusCode}`));
-          return;
-        }
-        let body = '';
-        res.on('data', (chunk: Buffer) => (body += chunk.toString('utf-8')));
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(body) as T);
-          } catch (err) {
-            reject(err instanceof Error ? err : new Error(String(err)));
-          }
-        });
-      })
-      .on('error', reject);
-  });
-}
-
-function downloadToFile(url: string, destination: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destination);
-    https
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          downloadToFile(res.headers.location, destination).then(resolve).catch(reject);
-          return;
-        }
-        if (res.statusCode && res.statusCode >= 400) {
-          reject(new Error(`Download failed with status ${res.statusCode}`));
-          return;
-        }
-        res.pipe(file);
-        file.on('finish', () => file.close(() => resolve()));
-      })
-      .on('error', reject);
-  });
-}
 
 /**
  * Downloads a static FFmpeg build for Windows from BtbN/FFmpeg-Builds — one
