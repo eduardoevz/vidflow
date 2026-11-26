@@ -16,22 +16,41 @@ function protocolFor(format: YtDlpFormatJson): MediaFormat['protocol'] {
   return 'direct';
 }
 
-function toResolutionLabel(height?: number | null): string | undefined {
-  if (!height) return undefined;
-  return `${height}p`;
+const AUDIO_ONLY_EXTENSIONS = new Set(['mp3', 'm4a', 'aac', 'opus', 'ogg', 'wav', 'flac', 'weba']);
+
+function toResolutionLabel(height?: number | null, formatNote?: string | null): string | undefined {
+  if (height) return `${height}p`;
+  if (formatNote && /^\d{3,4}p/i.test(formatNote)) return formatNote;
+  return undefined;
 }
 
-function normalizeFormat(raw: YtDlpFormatJson): MediaFormat | undefined {
+function normalizeFormat(raw: YtDlpFormatJson, durationSeconds?: number): MediaFormat | undefined {
   if (!raw.url) return undefined;
+  const ext = (raw.ext ?? '').toLowerCase();
+  if (ext === 'mhtml') return undefined;
 
-  const hasVideo = Boolean(raw.vcodec && raw.vcodec !== 'none');
-  const hasAudio = Boolean(raw.acodec && raw.acodec !== 'none');
-  const filesizeBytes = raw.filesize ?? raw.filesize_approx ?? undefined;
-  const filesizeIsEstimate = !raw.filesize && Boolean(raw.filesize_approx);
+  const isAudioExt = AUDIO_ONLY_EXTENSIONS.has(ext);
+  const vcodecKnown = raw.vcodec !== undefined && raw.vcodec !== null;
+  const acodecKnown = raw.acodec !== undefined && raw.acodec !== null;
+
+  const hasVideo = vcodecKnown
+    ? raw.vcodec !== 'none'
+    : !isAudioExt && (Boolean(raw.height || raw.width) || !acodecKnown || raw.acodec === 'none');
+  const hasAudio = acodecKnown
+    ? raw.acodec !== 'none'
+    : isAudioExt || !vcodecKnown;
+
+  const explicitSize = raw.filesize ?? raw.filesize_approx ?? undefined;
+  const estimatedFromBitrate =
+    explicitSize === undefined && raw.tbr && durationSeconds
+      ? Math.round(((raw.tbr * 1000) / 8) * durationSeconds)
+      : undefined;
+  const filesizeBytes = explicitSize ?? estimatedFromBitrate;
+  const filesizeIsEstimate = !raw.filesize && Boolean(raw.filesize_approx || estimatedFromBitrate);
 
   const base = {
     formatId: raw.format_id,
-    extension: raw.ext,
+    extension: raw.ext || 'mp4',
     protocol: protocolFor(raw),
     url: raw.url,
     bitrateKbps: raw.tbr ?? undefined,
@@ -49,7 +68,7 @@ function normalizeFormat(raw: YtDlpFormatJson): MediaFormat | undefined {
       kind: 'video',
       width: raw.width ?? undefined,
       height: raw.height ?? undefined,
-      resolutionLabel: toResolutionLabel(raw.height),
+      resolutionLabel: toResolutionLabel(raw.height, raw.format_note),
       fps: raw.fps ?? undefined,
       videoCodec: raw.vcodec ?? undefined,
       audioCodec: raw.acodec ?? undefined,
@@ -94,8 +113,28 @@ function normalizeSubtitles(info: YtDlpInfoJson): SubtitleTrack[] {
 }
 
 export function normalizeMediaInfo(raw: YtDlpInfoJson): MediaInfo {
-  const formats = (raw.formats ?? [])
-    .map(normalizeFormat)
+  const durationSeconds = raw.duration ?? undefined;
+  const rawFormats: YtDlpFormatJson[] =
+    raw.formats && raw.formats.length > 0
+      ? raw.formats
+      : raw.url
+        ? [
+            {
+              format_id: raw.format_id ?? 'best',
+              ext: raw.ext ?? 'mp4',
+              protocol: raw.protocol,
+              url: raw.url,
+              width: raw.width,
+              height: raw.height,
+              filesize: raw.filesize,
+              filesize_approx: raw.filesize_approx,
+              vcodec: raw.vcodec,
+              acodec: raw.acodec,
+            },
+          ]
+        : [];
+  const formats = rawFormats
+    .map((f) => normalizeFormat(f, durationSeconds))
     .filter((f): f is MediaFormat => f !== undefined);
 
   return {

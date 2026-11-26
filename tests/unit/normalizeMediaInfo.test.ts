@@ -30,4 +30,34 @@ describe('normalizeMediaInfo', () => {
     const withExact = media.formats.find((f) => f.filesizeBytes && !f.filesizeIsEstimate);
     expect(withEstimate || withExact).toBeTruthy();
   });
+
+  it('keeps generic formats where vcodec/acodec are omitted and falls back to top-level url', () => {
+    const info = normalizeMediaInfo({
+      id: 'generic-1',
+      title: 'Generic Video',
+      duration: 120,
+      formats: [
+        { format_id: 'hd', ext: 'mp4', url: 'https://cdn.example.com/720.mp4', height: 720, tbr: 1000 },
+        { format_id: 'sb', ext: 'mhtml', url: 'https://cdn.example.com/sb.mhtml', vcodec: 'none', acodec: 'none' },
+      ],
+    });
+    expect(info.formats).toHaveLength(1);
+    expect(info.formats[0]).toMatchObject({
+      kind: 'video',
+      formatId: 'hd',
+      resolutionLabel: '720p',
+      hasAudio: true,
+      hasVideo: true,
+      filesizeIsEstimate: true,
+    });
+
+    const topLevel = normalizeMediaInfo({
+      id: 'generic-2',
+      title: 'Top Level',
+      url: 'https://cdn.example.com/video.mp4',
+      ext: 'mp4',
+    });
+    expect(topLevel.formats).toHaveLength(1);
+    expect(topLevel.formats[0]?.formatId).toBe('best');
+  });
 });

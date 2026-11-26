@@ -12,8 +12,15 @@ export class AnalysisFailure extends Error {
   }
 }
 
+export interface ExtractionContext {
+  referer?: string;
+  userAgent?: string;
+  cookiesFilePath?: string;
+  getCookieHeader?: (url: string) => Promise<string | undefined>;
+}
+
 export interface ExtractionStrategy {
   readonly name: 'yt-dlp' | 'generic' | 'manifest';
   /** Throws AnalysisFailure when this strategy cannot handle the URL. */
-  analyze(url: string): Promise<MediaInfo>;
+  analyze(url: string, context?: ExtractionContext): Promise<MediaInfo>;
 }

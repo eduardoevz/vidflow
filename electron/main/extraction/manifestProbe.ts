@@ -1,13 +1,13 @@
 import https from 'node:https';
 import http from 'node:http';
 import type { MediaInfo, MediaFormat } from '../../../shared/media-types';
-import { AnalysisFailure, type ExtractionStrategy } from './types';
+import { AnalysisFailure, type ExtractionContext, type ExtractionStrategy } from './types';
 
-function fetchText(url: string): Promise<string> {
+function fetchText(url: string, headers: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
     client
-      .get(url, { headers: { 'User-Agent': 'VidFlow' } }, (res) => {
+      .get(url, { headers }, (res) => {
         if (res.statusCode && res.statusCode >= 400) {
           reject(new Error(`HTTP ${res.statusCode}`));
           return;
@@ -20,7 +20,7 @@ function fetchText(url: string): Promise<string> {
   });
 }
 
-function parseHlsVariants(playlist: string, baseUrl: string): MediaFormat[] {
+export function parseHlsVariants(playlist: string, baseUrl: string): MediaFormat[] {
   const lines = playlist.split('\n');
   const formats: MediaFormat[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -58,7 +58,7 @@ function parseHlsVariants(playlist: string, baseUrl: string): MediaFormat[] {
 export class ManifestProbe implements ExtractionStrategy {
   readonly name = 'manifest' as const;
 
-  async analyze(url: string): Promise<MediaInfo> {
+  async analyze(url: string, context?: ExtractionContext): Promise<MediaInfo> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -74,7 +74,11 @@ export class ManifestProbe implements ExtractionStrategy {
 
     let body: string;
     try {
-      body = await fetchText(url);
+      const headers: Record<string, string> = { 'User-Agent': context?.userAgent ?? 'VidFlow' };
+      if (context?.referer) headers.Referer = context.referer;
+      const cookie = await context?.getCookieHeader?.(url);
+      if (cookie) headers.Cookie = cookie;
+      body = await fetchText(url, headers);
     } catch (err) {
       throw new AnalysisFailure('network_error', `No se pudo acceder al manifiesto: ${(err as Error).message}`);
     }
@@ -104,7 +108,24 @@ export class ManifestProbe implements ExtractionStrategy {
       };
     }
 
-    const formats = parseHlsVariants(body, url);
+    let formats = parseHlsVariants(body, url);
+    if (formats.length === 0 && body.includes('#EXTINF:')) {
+      // Simple HLS media playlist (single quality, segments listed directly).
+      formats = [
+        {
+          kind: 'video',
+          formatId: 'hls-media-0',
+          extension: 'mp4',
+          protocol: 'hls',
+          url,
+          filesizeIsEstimate: true,
+          audioOnly: false,
+          videoOnly: false,
+          hasAudio: true,
+          hasVideo: true,
+        },
+      ];
+    }
     if (formats.length === 0) {
       throw new AnalysisFailure('unsupported_site', 'El manifiesto HLS no contiene variantes reproducibles.');
     }

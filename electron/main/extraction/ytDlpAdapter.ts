@@ -1,6 +1,6 @@
 import { spawnSafe } from '../security/spawnSafe';
 import { normalizeMediaInfo } from './normalizeMediaInfo';
-import { AnalysisFailure, type ExtractionStrategy } from './types';
+import { AnalysisFailure, type ExtractionContext, type ExtractionStrategy } from './types';
 import type { YtDlpInfoJson } from './ytDlpJson';
 import type { MediaInfo } from '../../../shared/media-types';
 import { getLogger } from '../logging/logger';
@@ -46,16 +46,16 @@ export class YtDlpAdapter implements ExtractionStrategy {
 
   constructor(private readonly binaryPath: string) {}
 
-  async analyze(url: string): Promise<MediaInfo> {
+  async analyze(url: string, context?: ExtractionContext): Promise<MediaInfo> {
     const logger = getLogger();
+    const args = ['--dump-json', '--no-playlist', '--no-warnings', '--skip-download'];
+    if (context?.cookiesFilePath) args.push('--cookies', context.cookiesFilePath);
+    if (context?.userAgent) args.push('--user-agent', context.userAgent);
+    if (context?.referer) args.push('--referer', context.referer);
+    args.push(url);
+
     return new Promise<MediaInfo>((resolve, reject) => {
-      const child = spawnSafe(this.binaryPath, [
-        '--dump-json',
-        '--no-playlist',
-        '--no-warnings',
-        '--skip-download',
-        url,
-      ]);
+      const child = spawnSafe(this.binaryPath, args);
 
       let stdout = '';
       let stderr = '';
@@ -79,7 +79,20 @@ export class YtDlpAdapter implements ExtractionStrategy {
             return;
           }
           const parsed = JSON.parse(firstLine) as YtDlpInfoJson;
-          resolve(normalizeMediaInfo(parsed));
+          const media = normalizeMediaInfo(parsed);
+          if (!media.metadata.originalUrl) {
+            media.metadata.originalUrl = url;
+          }
+          if (media.formats.length === 0) {
+            reject(
+              new AnalysisFailure(
+                'unsupported_site',
+                'No se encontraron formatos descargables en esta URL.',
+              ),
+            );
+            return;
+          }
+          resolve(media);
         } catch (err) {
           reject(new AnalysisFailure('unknown', `Respuesta de yt-dlp no válida: ${(err as Error).message}`));
         }

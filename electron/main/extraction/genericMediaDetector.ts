@@ -1,14 +1,17 @@
 import https from 'node:https';
 import http from 'node:http';
 import type { MediaInfo, MediaFormat } from '../../../shared/media-types';
-import { AnalysisFailure, type ExtractionStrategy } from './types';
+import { AnalysisFailure, type ExtractionContext, type ExtractionStrategy } from './types';
 
 const DIRECT_MEDIA_EXTENSIONS = ['.mp4', '.webm', '.m4v', '.mov'];
 
-function headRequest(url: string): Promise<{ contentType?: string; contentLength?: number }> {
+function headRequest(
+  url: string,
+  headers: Record<string, string>,
+): Promise<{ contentType?: string; contentLength?: number }> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https') ? https : http;
-    const req = client.request(url, { method: 'HEAD', headers: { 'User-Agent': 'VidFlow' } }, (res) => {
+    const req = client.request(url, { method: 'HEAD', headers }, (res) => {
       resolve({
         contentType: res.headers['content-type'],
         contentLength: res.headers['content-length'] ? Number(res.headers['content-length']) : undefined,
@@ -26,7 +29,7 @@ function headRequest(url: string): Promise<{ contentType?: string; contentLength
 export class GenericMediaDetector implements ExtractionStrategy {
   readonly name = 'generic' as const;
 
-  async analyze(url: string): Promise<MediaInfo> {
+  async analyze(url: string, context?: ExtractionContext): Promise<MediaInfo> {
     let parsed: URL;
     try {
       parsed = new URL(url);
@@ -43,7 +46,11 @@ export class GenericMediaDetector implements ExtractionStrategy {
 
     let head: { contentType?: string; contentLength?: number };
     try {
-      head = await headRequest(url);
+      const headers: Record<string, string> = { 'User-Agent': context?.userAgent ?? 'VidFlow' };
+      if (context?.referer) headers.Referer = context.referer;
+      const cookie = await context?.getCookieHeader?.(url);
+      if (cookie) headers.Cookie = cookie;
+      head = await headRequest(url, headers);
     } catch (err) {
       throw new AnalysisFailure('network_error', `No se pudo acceder al recurso: ${(err as Error).message}`);
     }

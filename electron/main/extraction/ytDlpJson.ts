@@ -35,6 +35,16 @@ export interface YtDlpInfoJson {
   webpage_url?: string | null;
   extractor_key?: string | null;
   is_live?: boolean | null;
+  url?: string;
+  ext?: string;
+  format_id?: string;
+  protocol?: string;
+  width?: number | null;
+  height?: number | null;
+  filesize?: number | null;
+  filesize_approx?: number | null;
+  vcodec?: string | null;
+  acodec?: string | null;
   formats?: YtDlpFormatJson[];
   subtitles?: Record<string, YtDlpSubtitleJson[]>;
   automatic_captions?: Record<string, YtDlpSubtitleJson[]>;
