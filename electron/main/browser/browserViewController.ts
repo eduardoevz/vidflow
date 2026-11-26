@@ -1,6 +1,10 @@
-import { BrowserView, type BrowserWindow, session, shell } from 'electron';
+import { BrowserView, type BrowserWindow, type Session, session, shell } from 'electron';
 import { installAdBlock, type AdBlockOptions } from './adBlockFilter';
+import { MediaSniffer } from './mediaSniffer';
 import { isHttpUrl } from '../security/paths';
+import type { DetectedBrowserMedia } from '../../../shared/ipc-contract';
+
+export const BROWSER_PARTITION = 'persist:vidflow-browser';
 
 export interface NavigationState {
   url: string;
@@ -11,12 +15,32 @@ export interface NavigationState {
 
 export class BrowserViewController {
   private view: BrowserView | undefined;
+  private readonly sniffer: MediaSniffer;
 
   constructor(
     private readonly parentWindow: BrowserWindow,
     private readonly onNavigationStateChanged: (state: NavigationState) => void,
     private readonly getAdBlockOptions: () => AdBlockOptions,
-  ) {}
+    onMediaDetected: (items: DetectedBrowserMedia[]) => void = () => undefined,
+  ) {
+    this.sniffer = new MediaSniffer(onMediaDetected);
+  }
+
+  getSession(): Session {
+    return session.fromPartition(BROWSER_PARTITION);
+  }
+
+  getUserAgent(): string {
+    return this.view?.webContents.getUserAgent() ?? this.getSession().getUserAgent();
+  }
+
+  getDetectedMedia(): DetectedBrowserMedia[] {
+    return this.sniffer.list();
+  }
+
+  clearDetectedMedia(): void {
+    this.sniffer.clear();
+  }
 
   ensureCreated(): BrowserView {
     if (this.view) return this.view;
@@ -31,7 +55,7 @@ export class BrowserViewController {
         // own session — the app's strict CSP header is only ever attached
         // to session.defaultSession, and would otherwise break most
         // external sites if it applied here too.
-        session: session.fromPartition('persist:vidflow-browser'),
+        session: this.getSession(),
         // Deliberately no preload script: pages loaded here are untrusted
         // remote content and must have zero access to any VidFlow API.
       },
@@ -45,10 +69,17 @@ export class BrowserViewController {
     });
 
     installAdBlock(this.view.webContents.session, this.getAdBlockOptions);
+    this.sniffer.installOnSession(this.view.webContents.session, () => ({
+      pageUrl: this.view?.webContents.getURL() ?? '',
+      pageTitle: this.view?.webContents.getTitle() ?? '',
+    }));
 
     this.view.webContents.on('did-start-loading', () => this.emitState());
     this.view.webContents.on('did-stop-loading', () => this.emitState());
-    this.view.webContents.on('did-navigate', () => this.emitState());
+    this.view.webContents.on('did-navigate', () => {
+      this.sniffer.clear();
+      this.emitState();
+    });
     this.view.webContents.on('did-navigate-in-page', () => this.emitState());
 
     // Only http(s) navigations are permitted inside the embedded browser.

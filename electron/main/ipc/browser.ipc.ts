@@ -25,4 +25,6 @@ export function registerBrowserIpc(browser: BrowserViewController): void {
     if (visible) browser.show();
     else browser.hide();
   });
+  ipcMain.handle(IPC_CHANNELS.browserGetDetectedMedia, () => browser.getDetectedMedia());
+  ipcMain.handle(IPC_CHANNELS.browserClearDetectedMedia, () => browser.clearDetectedMedia());
 }
