@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
-import type { AnalysisError, MediaInfo } from '../../../shared/media-types';
+import type { AnalysisError, AnalysisOptions, MediaInfo } from '../../../shared/media-types';
 
 interface AnalyzeState {
   loading: boolean;
   media?: MediaInfo;
   error?: AnalysisError;
-  analyze: (url: string) => Promise<void>;
+  analyze: (url: string, options?: AnalysisOptions) => Promise<void>;
   reset: () => void;
 }
 
@@ -14,12 +14,12 @@ export function useAnalyze(): AnalyzeState {
   const [media, setMedia] = useState<MediaInfo | undefined>(undefined);
   const [error, setError] = useState<AnalysisError | undefined>(undefined);
 
-  const analyze = useCallback(async (url: string) => {
+  const analyze = useCallback(async (url: string, options?: AnalysisOptions) => {
     setLoading(true);
     setError(undefined);
     setMedia(undefined);
     try {
-      const result = await window.vidflow.analyzeUrl(url);
+      const result = await window.vidflow.analyzeUrl(url, options);
       if (result.ok) {
         setMedia(result.data);
       } else {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { History as HistoryIcon, FolderOpen, Play, Link as LinkIcon, Copy, Trash2 } from 'lucide-react';
+import { History as HistoryIcon, FolderOpen, Play, Link as LinkIcon, Copy, Check, Trash2, Search } from 'lucide-react';
 import type { HistoryFilter, HistoryRecord } from '../../../shared/ipc-contract';
 import { EmptyState } from '../../components/EmptyState';
 import { Button } from '../../components/Button';
@@ -9,6 +9,7 @@ export function HistoryPage(): JSX.Element {
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'size'>('date');
+  const [copiedId, setCopiedId] = useState<number | undefined>(undefined);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | undefined>(undefined);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -24,51 +25,64 @@ export function HistoryPage(): JSX.Element {
   if (records.length === 0 && !search) {
     return (
       <EmptyState
-        icon={<HistoryIcon size={28} />}
+        icon={<HistoryIcon size={26} />}
         title="El historial está vacío"
-        description="Los videos que descargues aparecerán aquí para que puedas volver a ellos fácilmente."
+        description="Los videos que descargues aparecerán aquí para que puedas reproducirlos o abrir su carpeta fácilmente."
       />
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold text-content">Historial</h1>
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-semibold tracking-tight text-content">Historial</h1>
+          <span className="rounded-full bg-surface-sunken px-2.5 py-0.5 text-xs font-semibold text-content-muted">
+            {records.length}
+          </span>
+        </div>
         <Button variant="danger" onClick={() => setConfirmClear(true)}>
           Vaciar historial
         </Button>
       </div>
 
       <div className="flex gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por título..."
-          className="focus-ring flex-1 rounded-card border border-border bg-surface-raised px-4 py-2 text-sm text-content placeholder:text-content-muted"
-        />
+        <div className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-surface-raised px-3.5 py-2 shadow-sm focus-within:border-accent/60">
+          <Search size={15} className="text-content-muted" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por título..."
+            className="w-full bg-transparent text-sm text-content placeholder:text-content-muted focus:outline-none"
+          />
+        </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as 'date' | 'size')}
-          className="focus-ring rounded-card border border-border bg-surface-raised px-3 py-2 text-sm text-content"
+          className="focus-ring rounded-xl border border-border bg-surface-raised px-3.5 py-2 text-sm text-content shadow-sm"
         >
           <option value="date">Más reciente</option>
           <option value="size">Tamaño</option>
         </select>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2.5">
         {records.map((record) => (
-          <div key={record.id} className="flex items-center gap-4 rounded-card border border-border bg-surface-raised p-3">
+          <div
+            key={record.id}
+            className="flex items-center gap-4 rounded-xl border border-border bg-surface-raised p-3.5 shadow-sm transition-colors hover:border-accent/40"
+          >
             {record.thumbnailPath ? (
-              <img src={record.thumbnailPath} alt="" className="h-14 w-24 shrink-0 rounded object-cover" />
+              <img src={record.thumbnailPath} alt="" className="h-14 w-24 shrink-0 rounded-lg object-cover" />
             ) : (
-              <div className="h-14 w-24 shrink-0 rounded bg-surface-sunken" />
+              <div className="flex h-14 w-24 shrink-0 items-center justify-center rounded-lg bg-surface-sunken text-content-muted">
+                <Play size={18} />
+              </div>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-content">{record.title}</p>
-              <p className="text-xs text-content-muted">
-                {[record.source, record.resolution, record.format, formatBytes(record.filesizeBytes)]
+              <p className="truncate text-sm font-semibold text-content">{record.title}</p>
+              <p className="mt-0.5 text-xs text-content-muted">
+                {[record.source, record.resolution, record.format?.toUpperCase(), formatBytes(record.filesizeBytes)]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -94,9 +108,13 @@ export function HistoryPage(): JSX.Element {
               <Button
                 variant="ghost"
                 title="Copiar URL"
-                onClick={() => void window.vidflow.copyToClipboard(record.originalUrl)}
+                onClick={() => {
+                  void window.vidflow.copyToClipboard(record.originalUrl);
+                  setCopiedId(record.id);
+                  setTimeout(() => setCopiedId((curr) => (curr === record.id ? undefined : curr)), 1500);
+                }}
               >
-                <Copy size={16} />
+                {copiedId === record.id ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
               </Button>
               <Button variant="ghost" title="Eliminar" onClick={() => setConfirmDeleteId(record.id)}>
                 <Trash2 size={16} />
@@ -154,8 +172,8 @@ function ConfirmDeleteDialog({
   onDeleteFile: () => void;
 }): JSX.Element {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-card border border-border bg-surface-raised p-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-surface-raised p-5 shadow-lg">
         <p className="text-sm font-semibold text-content">¿Qué deseas eliminar?</p>
         <div className="flex flex-col gap-2">
           <Button variant="secondary" onClick={() => void onRemoveFromHistory()}>
@@ -185,8 +203,8 @@ function ConfirmDialog({
   onConfirm: () => void;
 }): JSX.Element {
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-card border border-border bg-surface-raised p-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-border bg-surface-raised p-5 shadow-lg">
         <p className="text-sm font-semibold text-content">{title}</p>
         <p className="text-sm text-content-muted">{description}</p>
         <div className="flex justify-end gap-2">
