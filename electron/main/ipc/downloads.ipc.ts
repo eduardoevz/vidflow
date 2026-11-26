@@ -7,7 +7,7 @@ const downloadRequestSchema = z.object({
   originalUrl: z.string().url(),
   title: z.string().min(1),
   source: z.string(),
-  thumbnailUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().optional(),
   durationSeconds: z.number().optional(),
   formatId: z.string().min(1),
   audioFormatId: z.string().optional(),
@@ -17,7 +17,9 @@ const downloadRequestSchema = z.object({
   filesizeIsEstimate: z.boolean(),
   filenameTemplate: z.string().min(1),
   useYtDlp: z.boolean(),
-  downloadUrl: z.string().url().optional(),
+  downloadUrl: z.string().optional(),
+  protocol: z.enum(['https', 'http', 'hls', 'dash', 'direct']).optional(),
+  referer: z.string().optional(),
   audioOnly: z.boolean(),
 });
 
@@ -46,5 +48,9 @@ export function registerDownloadsIpc(ctx: IpcContext): void {
     ctx.downloadManager.retry(taskIdSchema.parse(taskId));
   });
 
-  ipcMain.handle(IPC_CHANNELS.listDownloads, () => ctx.downloadManager.listAll());
+  ipcMain.handle(IPC_CHANNELS.dismissDownload, (_event, taskId: unknown) => {
+    ctx.downloadManager.dismiss(taskIdSchema.parse(taskId));
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listDownloads, () => ctx.downloadManager.listActive());
 }

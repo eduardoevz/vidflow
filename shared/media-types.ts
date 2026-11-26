@@ -51,6 +51,11 @@ export interface MediaMetadata {
   uploadDate?: string;
   siteName: string;
   originalUrl: string;
+  referer?: string;
+}
+
+export interface AnalysisOptions {
+  referer?: string;
 }
 
 export interface MediaInfo {

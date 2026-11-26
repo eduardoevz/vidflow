@@ -1,4 +1,4 @@
-import type { MediaInfo, AnalysisError } from './media-types';
+import type { MediaInfo, AnalysisError, AnalysisOptions } from './media-types';
 import type { DownloadProgress, DownloadRecord, DownloadRequest } from './download-types';
 import type { AppSettings } from './settings-types';
 
@@ -47,15 +47,29 @@ export interface BrowserBounds {
   height: number;
 }
 
+export interface DetectedBrowserMedia {
+  url: string;
+  type: 'hls' | 'dash' | 'video';
+  mimeType?: string;
+  sizeBytes?: number;
+  referer?: string;
+  pageTitle?: string;
+  detectedAt: number;
+}
+
 /** Single source of truth for every channel exposed on window.vidflow. */
 export interface VidFlowApi {
-  analyzeUrl(url: string): Promise<{ ok: true; data: MediaInfo } | { ok: false; error: AnalysisError }>;
+  analyzeUrl(
+    url: string,
+    options?: AnalysisOptions,
+  ): Promise<{ ok: true; data: MediaInfo } | { ok: false; error: AnalysisError }>;
 
   startDownload(request: DownloadRequest): Promise<{ taskId: string }>;
   pauseDownload(taskId: string): Promise<void>;
   resumeDownload(taskId: string): Promise<void>;
   cancelDownload(taskId: string): Promise<void>;
   retryDownload(taskId: string): Promise<void>;
+  dismissDownload(taskId: string): Promise<void>;
   listDownloads(): Promise<DownloadRecord[]>;
   onDownloadProgress(callback: (progress: DownloadProgress) => void): () => void;
 
@@ -84,6 +98,9 @@ export interface VidFlowApi {
   browserSetBounds(bounds: BrowserBounds): Promise<void>;
   browserSetVisible(visible: boolean): Promise<void>;
   onBrowserNavigationState(callback: (state: BrowserNavigationState) => void): () => void;
+  browserGetDetectedMedia(): Promise<DetectedBrowserMedia[]>;
+  browserClearDetectedMedia(): Promise<void>;
+  onBrowserMediaDetected(callback: (items: DetectedBrowserMedia[]) => void): () => void;
 
   confirmQuit(): Promise<void>;
   minimizeToTray(): Promise<void>;

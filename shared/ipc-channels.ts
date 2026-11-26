@@ -11,6 +11,7 @@ export const IPC_CHANNELS = {
   resumeDownload: 'vidflow:resumeDownload',
   cancelDownload: 'vidflow:cancelDownload',
   retryDownload: 'vidflow:retryDownload',
+  dismissDownload: 'vidflow:dismissDownload',
   listDownloads: 'vidflow:listDownloads',
   downloadProgress: 'vidflow:downloadProgress',
 
@@ -39,6 +40,9 @@ export const IPC_CHANNELS = {
   browserSetBounds: 'vidflow:browserSetBounds',
   browserSetVisible: 'vidflow:browserSetVisible',
   browserNavigationState: 'vidflow:browserNavigationState',
+  browserGetDetectedMedia: 'vidflow:browserGetDetectedMedia',
+  browserClearDetectedMedia: 'vidflow:browserClearDetectedMedia',
+  browserMediaDetected: 'vidflow:browserMediaDetected',
 
   confirmQuit: 'vidflow:confirmQuit',
   requestCloseConfirmation: 'vidflow:requestCloseConfirmation',

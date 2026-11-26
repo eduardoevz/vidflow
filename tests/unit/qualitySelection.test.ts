@@ -117,4 +117,33 @@ describe('buildDownloadRequest', () => {
       buildDownloadRequest({ media: sampleMedia, filenameTemplate: '{title}', formatId: 'missing' }),
     ).toThrow();
   });
+
+  it('pairs a manually-selected video-only format with the best audio (regression: audio was missing)', () => {
+    const request = buildDownloadRequest({
+      media: sampleMedia,
+      filenameTemplate: '{title}',
+      formatId: '1080', // videoOnly per the fixture above
+    });
+    expect(request.formatId).toBe('1080');
+    expect(request.audioFormatId).toBe('audio-high');
+  });
+
+  it('does not attach an audio format when manually selecting one that already has audio', () => {
+    const withAudio = {
+      ...sampleMedia,
+      formats: [...sampleMedia.formats, videoFormat({ formatId: 'muxed', height: 480, hasAudio: true, videoOnly: false })],
+    };
+    const request = buildDownloadRequest({ media: withAudio, filenameTemplate: '{title}', formatId: 'muxed' });
+    expect(request.audioFormatId).toBeUndefined();
+  });
+
+  it('manually selecting an audio-only format works without a preset', () => {
+    const request = buildDownloadRequest({
+      media: sampleMedia,
+      filenameTemplate: '{title}',
+      formatId: 'audio-low',
+    });
+    expect(request.audioOnly).toBe(true);
+    expect(request.formatId).toBe('audio-low');
+  });
 });

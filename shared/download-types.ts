@@ -1,3 +1,5 @@
+import type { MediaProtocol } from './media-types';
+
 export type DownloadStatus =
   | 'queued'
   | 'analyzing'
@@ -40,6 +42,10 @@ export interface DownloadRequest {
   useYtDlp: boolean;
   /** direct media URL, required when useYtDlp is false (generic/manifest sources) */
   downloadUrl?: string;
+  /** protocol of the selected format (e.g. 'hls', 'dash', 'direct') */
+  protocol?: MediaProtocol;
+  /** optional Referer header to pass when fetching protected streams */
+  referer?: string;
   audioOnly: boolean;
 }
 

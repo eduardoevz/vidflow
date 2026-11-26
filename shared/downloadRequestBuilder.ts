@@ -1,6 +1,6 @@
 import type { MediaFormat, MediaInfo, QualityPreset } from './media-types';
 import type { DownloadRequest } from './download-types';
-import { selectFormatForPreset } from './qualitySelection';
+import { selectFormatForPreset, bestAudio } from './qualitySelection';
 
 export interface BuildDownloadRequestInput {
   media: MediaInfo;
@@ -21,10 +21,21 @@ export function buildDownloadRequest(input: BuildDownloadRequestInput): Download
     video = picked.video;
     audio = picked.audio;
   } else if (input.formatId) {
-    video = media.formats.find((f) => f.formatId === input.formatId);
-    audio = input.audioFormatId
-      ? media.formats.find((f) => f.formatId === input.audioFormatId)
-      : undefined;
+    const selected = media.formats.find((f) => f.formatId === input.formatId);
+    if (selected?.kind === 'video') {
+      video = selected;
+      // A manually-picked video-only stream (the common case above the
+      // lowest quality on most sites) needs an audio stream paired in, the
+      // same way the smart presets already do via selectFormatForPreset —
+      // otherwise the download silently has no audio.
+      audio = input.audioFormatId
+        ? media.formats.find((f) => f.formatId === input.audioFormatId)
+        : video.hasAudio
+          ? undefined
+          : bestAudio(media.formats);
+    } else {
+      audio = selected;
+    }
   }
 
   const primary = video ?? audio;
@@ -49,6 +60,8 @@ export function buildDownloadRequest(input: BuildDownloadRequestInput): Download
     filenameTemplate: input.filenameTemplate,
     useYtDlp: media.extractor === 'yt-dlp',
     downloadUrl: media.extractor === 'yt-dlp' ? undefined : primary.url,
+    protocol: primary.protocol,
+    referer: media.metadata.referer,
     audioOnly,
   };
 }

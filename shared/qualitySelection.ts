@@ -4,7 +4,7 @@ function isVideo(f: MediaFormat): f is VideoFormat {
   return f.kind === 'video';
 }
 
-function bestAudio(formats: MediaFormat[]): MediaFormat | undefined {
+export function bestAudio(formats: MediaFormat[]): MediaFormat | undefined {
   return formats
     .filter((f) => f.kind === 'audio')
     .sort((a, b) => (b.bitrateKbps ?? 0) - (a.bitrateKbps ?? 0))[0];

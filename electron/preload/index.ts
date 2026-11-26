@@ -3,13 +3,14 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { VidFlowApi } from '../../shared/ipc-contract';
 
 const api: VidFlowApi = {
-  analyzeUrl: (url) => ipcRenderer.invoke(IPC_CHANNELS.analyzeUrl, url),
+  analyzeUrl: (url, options) => ipcRenderer.invoke(IPC_CHANNELS.analyzeUrl, url, options),
 
   startDownload: (request) => ipcRenderer.invoke(IPC_CHANNELS.startDownload, request),
   pauseDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.pauseDownload, taskId),
   resumeDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.resumeDownload, taskId),
   cancelDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.cancelDownload, taskId),
   retryDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.retryDownload, taskId),
+  dismissDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.dismissDownload, taskId),
   listDownloads: () => ipcRenderer.invoke(IPC_CHANNELS.listDownloads),
   onDownloadProgress: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) =>
@@ -47,6 +48,14 @@ const api: VidFlowApi = {
       callback(state);
     ipcRenderer.on(IPC_CHANNELS.browserNavigationState, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.browserNavigationState, listener);
+  },
+  browserGetDetectedMedia: () => ipcRenderer.invoke(IPC_CHANNELS.browserGetDetectedMedia),
+  browserClearDetectedMedia: () => ipcRenderer.invoke(IPC_CHANNELS.browserClearDetectedMedia),
+  onBrowserMediaDetected: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: Parameters<typeof callback>[0]) =>
+      callback(items);
+    ipcRenderer.on(IPC_CHANNELS.browserMediaDetected, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.browserMediaDetected, listener);
   },
 
   confirmQuit: () => ipcRenderer.invoke(IPC_CHANNELS.confirmQuit),
