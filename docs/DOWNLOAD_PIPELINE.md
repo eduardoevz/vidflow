@@ -23,11 +23,16 @@ loop, not a growing pile of site-specific branches.
 - **Default (MVP): yt-dlp's native downloader**, with concurrent-fragment
   downloading (`--concurrent-fragments N`, configurable) for HLS/DASH sources
   — this satisfies "maximum reasonable speed" without a second managed binary.
-- **Deferred: `aria2c`** as an alternate backend for direct progressive HTTP
-  files, selectable per the "external engine" setting once added. The
-  `DownloadManager` already treats "downloader backend" as an injected
-  strategy (`YtDlpDownloadBackend` today; `Aria2DownloadBackend` later) so
-  adding it is additive, not a redesign.
+- **`aria2c` (multi-connection accelerator)**: selectable as an alternate
+  download engine in Settings (`downloadEngine: 'aria2'`). When enabled:
+  - For yt-dlp downloads, yt-dlp delegates chunk fetching to aria2c via
+    `--downloader <path>` and `--downloader-args "aria2c:-x <N> -s <N> -k 1M"`.
+  - For direct progressive HTTP / generic manifest downloads,
+    `Aria2DownloadBackend` spawns `aria2c` directly with multi-connection
+    support and real-time progress parsing.
+  - Automatically provisioned at startup (downloaded from official GitHub
+    releases if not found on PATH). Degrades gracefully to yt-dlp native if
+    unavailable.
 
 ## Video + Audio Merge
 

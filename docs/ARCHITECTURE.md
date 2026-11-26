@@ -81,10 +81,9 @@ version, or adding a new extraction strategy) without touching the UI.
 - `yt-dlp` and `ffmpeg` are external, independently-updatable binaries managed
   by `EngineManager` — the app does not need to be rebuilt to pick up a newer
   extractor.
-- `aria2c` as an alternate download backend is deferred (see
-  `docs/DOWNLOAD_PIPELINE.md`), but the `DownloadManager` already models
-  "downloader backend" as a pluggable strategy so it can be added later
-  without a redesign.
+- `aria2c` is supported as an optional high-speed multi-connection download backend
+  (for both yt-dlp delegation and direct HTTP downloads via `Aria2DownloadBackend`),
+  auto-provisioned by `EngineManager` and configured in Settings.
 
 ## Offline Behavior
 
