@@ -17,6 +17,7 @@
     "build:electron": "npm run build:main && npm run build:preload",
     "build": "npm run build:renderer && npm run build:electron",
     "build:win": "npm run build && npm run rebuild:electron && electron-builder --win",
+    "build:portable": "npm run build && npm run rebuild:electron && electron-builder --win portable",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3",
     "lint": "eslint . --ext .ts,.tsx",
