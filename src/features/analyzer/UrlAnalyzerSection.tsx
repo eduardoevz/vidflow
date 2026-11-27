@@ -11,7 +11,7 @@ const URL_PATTERN = /^https?:\/\/\S+$/i;
 
 function extractUrls(raw: string): string[] {
   return raw
-    .split(/[\r\n]+/)
+    .split(/[\r\n\s]+/)
     .map((line) => line.trim())
     .filter((line) => URL_PATTERN.test(line));
 }
@@ -119,15 +119,21 @@ export function UrlAnalyzerSection({
           <span className="pl-2.5 text-content-muted">
             <Link2 size={16} />
           </span>
-          <input
+          <textarea
+            rows={urlsInInput.length > 1 ? Math.min(4, urlsInInput.length) : 1}
             value={url}
             onChange={(e) => {
               setUrl(e.target.value);
               setReferer(undefined);
             }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
             placeholder="Pega aquí uno o varios enlaces (o una playlist)..."
-            className="flex-1 bg-transparent px-2 py-1.5 text-sm text-content placeholder:text-content-muted focus:outline-none"
+            className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-content placeholder:text-content-muted focus:outline-none"
           />
           {url && (
             <Button
