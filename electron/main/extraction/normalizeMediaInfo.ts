@@ -19,7 +19,12 @@ function protocolFor(format: YtDlpFormatJson): MediaFormat['protocol'] {
 const AUDIO_ONLY_EXTENSIONS = new Set(['mp3', 'm4a', 'aac', 'opus', 'ogg', 'wav', 'flac', 'weba']);
 
 function toResolutionLabel(height?: number | null, formatNote?: string | null): string | undefined {
-  if (height) return `${height}p`;
+  if (height) {
+    if (height >= 4320) return '8K';
+    if (height >= 2160) return '4K';
+    if (height >= 1440) return '2K';
+    return `${height}p`;
+  }
   if (formatNote && /^\d{3,4}p/i.test(formatNote)) return formatNote;
   return undefined;
 }

@@ -82,3 +82,36 @@ export async function extractAudio(
     });
   });
 }
+
+/**
+ * Trims a media file to [startSeconds, endSeconds] using FFmpeg stream copy
+ * when possible, falling back to re-encoding if keyframe alignment requires it.
+ */
+export async function trimMediaFile(
+  ffmpegPath: string,
+  inputPath: string,
+  outputPath: string,
+  startSeconds: number,
+  endSeconds: number,
+): Promise<void> {
+  const duration = Math.max(0.1, endSeconds - startSeconds);
+  const args = [
+    '-y',
+    '-ss', String(startSeconds),
+    '-i', inputPath,
+    '-t', String(duration),
+    '-c', 'copy',
+    outputPath,
+  ];
+
+  return new Promise((resolve, reject) => {
+    const child = spawnSafe(ffmpegPath, args);
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf-8')));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new FfmpegError(stderr.slice(-800)));
+    });
+  });
+}

@@ -5,9 +5,10 @@ interface VideoPlayerProps {
   src: string;
   protocol: 'hls' | 'dash' | 'https' | 'http' | 'direct';
   poster?: string;
+  onTimeUpdate?: (seconds: number) => void;
 }
 
-export function VideoPlayer({ src, protocol, poster }: VideoPlayerProps): JSX.Element {
+export function VideoPlayer({ src, protocol, poster, onTimeUpdate }: VideoPlayerProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function VideoPlayer({ src, protocol, poster }: VideoPlayerProps): JSX.El
       ref={videoRef}
       poster={poster}
       controls
+      onTimeUpdate={(e) => onTimeUpdate?.(e.currentTarget.currentTime)}
       className="aspect-video w-full rounded-card bg-black"
     >
       No es posible reproducir este video en tu navegador.

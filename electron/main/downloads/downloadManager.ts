@@ -9,7 +9,7 @@ import { renderFilenameTemplate, resolveCollisionFreePath } from './filenameTemp
 import { startYtDlpDownload, type RunningDownload } from './ytDlpDownloadBackend';
 import { startHttpDownload, type HttpDownloadHandle } from './httpDownloadBackend';
 import { startAria2Download, type Aria2DownloadHandle } from './aria2DownloadBackend';
-import { extractAudio } from './ffmpegMerger';
+import { extractAudio, trimMediaFile } from './ffmpegMerger';
 import { getLogger } from '../logging/logger';
 
 interface Task {
@@ -180,6 +180,11 @@ export class DownloadManager {
             cookiesFilePath: sessionCtx?.cookiesFilePath,
             userAgent: sessionCtx?.userAgent,
             referer: task.request.referer,
+            subtitleLanguages: task.request.subtitleLanguages,
+            embedSubtitles: task.request.embedSubtitles,
+            writeSubtitles: task.request.writeSubtitles,
+            clipRange: task.request.clipRange,
+            sponsorBlockCategories: task.request.sponsorBlockCategories,
             externalDownloader: aria2Path
               ? { path: aria2Path, connections: this.deps.getConnectionsPerDownload() }
               : undefined,
@@ -264,6 +269,19 @@ export class DownloadManager {
           const codec = task.request.extension === 'mp3' ? 'libmp3lame' : 'copy';
           await extractAudio(this.deps.getFfmpegPath(), rawTarget, task.destinationPath, codec);
           fs.unlinkSync(rawTarget);
+        } else if (task.request.clipRange) {
+          task.status = 'processing';
+          this.deps.downloadsRepo.updateProgress(task.downloadId, 'processing', 100);
+          this.emit(task);
+          const trimmedTemp = `${task.destinationPath}.trimmed.${task.request.extension}`;
+          await trimMediaFile(
+            this.deps.getFfmpegPath(),
+            task.destinationPath,
+            trimmedTemp,
+            task.request.clipRange.startSeconds,
+            task.request.clipRange.endSeconds,
+          );
+          fs.renameSync(trimmedTemp, task.destinationPath);
         }
       }
 

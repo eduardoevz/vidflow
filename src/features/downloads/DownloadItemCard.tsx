@@ -64,8 +64,10 @@ export function DownloadItemCard({
             >
               {STATUS_LABELS[status] ?? status}
             </span>
-            {record.resolution && (
-              <span className="text-xs text-content-muted">{record.resolution}</span>
+            {(live?.resolutionLabel ?? record.resolution) && (
+              <span className="text-xs font-medium text-content-muted">
+                {live?.resolutionLabel ?? record.resolution}
+              </span>
             )}
             <span className="text-xs uppercase text-content-muted">{record.format}</span>
           </div>

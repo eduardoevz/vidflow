@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ClipRange } from '../../../shared/download-types';
 import { spawnSafe } from '../security/spawnSafe';
 import { parseYtDlpProgressLine } from './progressParser';
 
@@ -27,12 +28,14 @@ export interface YtDlpDownloadOptions {
   cookiesFilePath?: string;
   userAgent?: string;
   referer?: string;
+  subtitleLanguages?: string[];
+  embedSubtitles?: boolean;
+  writeSubtitles?: boolean;
+  clipRange?: ClipRange;
+  sponsorBlockCategories?: string[];
 }
 
-export function startYtDlpDownload(
-  options: YtDlpDownloadOptions,
-  callbacks: DownloadBackendCallbacks,
-): Promise<void> & { handle: RunningDownload } {
+export function buildYtDlpDownloadArgs(options: YtDlpDownloadOptions): string[] {
   const args = [
     '--newline',
     '--no-warnings',
@@ -46,6 +49,27 @@ export function startYtDlpDownload(
   if (options.cookiesFilePath) args.push('--cookies', options.cookiesFilePath);
   if (options.userAgent) args.push('--user-agent', options.userAgent);
   if (options.referer) args.push('--referer', options.referer);
+
+  if (options.subtitleLanguages && options.subtitleLanguages.length > 0) {
+    if (options.writeSubtitles !== false) {
+      args.push('--write-subs', '--write-auto-subs');
+    }
+    args.push('--sub-langs', options.subtitleLanguages.join(','));
+    args.push('--sub-format', 'srt/vtt/best');
+    if (options.embedSubtitles && !options.extractAudioOnly) {
+      args.push('--embed-subs');
+    }
+  }
+
+  if (options.clipRange) {
+    const start = Math.max(0, options.clipRange.startSeconds);
+    const end = Math.max(start + 0.1, options.clipRange.endSeconds);
+    args.push('--download-sections', `*${start}-${end}`, '--force-keyframes-at-cuts');
+  }
+
+  if (options.sponsorBlockCategories && options.sponsorBlockCategories.length > 0) {
+    args.push('--sponsorblock-remove', options.sponsorBlockCategories.join(','));
+  }
 
   args.push(options.url);
 
@@ -65,6 +89,15 @@ export function startYtDlpDownload(
       `aria2c:-x ${options.externalDownloader.connections} -s ${options.externalDownloader.connections} -k 1M`,
     );
   }
+
+  return args;
+}
+
+export function startYtDlpDownload(
+  options: YtDlpDownloadOptions,
+  callbacks: DownloadBackendCallbacks,
+): Promise<void> & { handle: RunningDownload } {
+  const args = buildYtDlpDownloadArgs(options);
 
   const child = spawnSafe(options.ytDlpPath, args);
   let stderrTail = '';
