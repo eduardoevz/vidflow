@@ -9,6 +9,7 @@ import { HomePage } from '../features/home/HomePage';
 import { BrowserPage } from '../features/browser/BrowserPage';
 import { DownloadsPage } from '../features/downloads/DownloadsPage';
 import { HistoryPage } from '../features/history/HistoryPage';
+import { SubscriptionsPage } from '../features/subscriptions/SubscriptionsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 
 function ThemedApp(): JSX.Element {
@@ -29,6 +30,7 @@ function ThemedApp(): JSX.Element {
           <Route index element={<HomePage />} />
           <Route path="browser" element={<BrowserPage />} />
           <Route path="downloads" element={<DownloadsPage />} />
+          <Route path="subscriptions" element={<SubscriptionsPage />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

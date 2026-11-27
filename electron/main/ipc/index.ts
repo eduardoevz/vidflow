@@ -7,6 +7,7 @@ import { registerSettingsIpc } from './settings.ipc';
 import { registerSystemIpc } from './system.ipc';
 import { registerEnginesIpc } from './engines.ipc';
 import { registerBrowserIpc } from './browser.ipc';
+import { registerSubscriptionsIpc } from './subscriptions.ipc';
 
 export function registerAllIpcHandlers(ctx: IpcContext, browser: BrowserViewController): void {
   registerAnalyzeIpc(ctx);
@@ -15,5 +16,6 @@ export function registerAllIpcHandlers(ctx: IpcContext, browser: BrowserViewCont
   registerSettingsIpc(ctx);
   registerSystemIpc(ctx);
   registerEnginesIpc(ctx);
+  registerSubscriptionsIpc(ctx);
   registerBrowserIpc(browser);
 }

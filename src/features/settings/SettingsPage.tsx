@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { SettingsSection, ToggleRow } from './SettingsSection';
 import { Button } from '../../components/Button';
-import type { EngineVersions } from '../../../shared/ipc-contract';
+import type { AppUpdateInfo, EngineVersions } from '../../../shared/ipc-contract';
 
 export function SettingsPage(): JSX.Element {
   const { settings, update } = useSettingsStore();
   const [versions, setVersions] = useState<EngineVersions | undefined>(undefined);
   const [checking, setChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState<boolean | undefined>(undefined);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | undefined>(undefined);
+  const [adblockStatus, setAdblockStatus] = useState<string | undefined>(undefined);
+  const [whisperStatus, setWhisperStatus] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     void window.vidflow.getEngineVersions().then(setVersions);
@@ -79,13 +82,18 @@ export function SettingsPage(): JSX.Element {
             ))}
           </select>
         </label>
-        <label className="flex items-center justify-between text-sm text-content">
-          Plantilla de nombre de archivo
-          <input
-            value={settings.filenameTemplate}
-            onChange={(e) => void update({ filenameTemplate: e.target.value })}
-            className="focus-ring rounded-card border border-border bg-surface px-2 py-1 text-sm"
-          />
+        <label className="flex flex-col gap-1 text-sm text-content">
+          <div className="flex items-center justify-between">
+            <span>Plantilla de nombre / subcarpetas</span>
+            <input
+              value={settings.filenameTemplate}
+              onChange={(e) => void update({ filenameTemplate: e.target.value })}
+              className="focus-ring w-64 rounded-card border border-border bg-surface px-2 py-1 text-sm"
+            />
+          </div>
+          <span className="text-[11px] text-content-muted">
+            Variables: {'{title}'}, {'{author}'}, {'{site}'}, {'{resolution}'}, {'{date}'}. Ejemplo con carpetas: {'{site}/{author}/{title}'}
+          </span>
         </label>
         <label className="flex items-center justify-between text-sm text-content">
           Motor de descarga
@@ -132,6 +140,23 @@ export function SettingsPage(): JSX.Element {
           checked={settings.popupBlockEnabled}
           onChange={(v) => void update({ popupBlockEnabled: v })}
         />
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-xs text-content-muted">
+            {adblockStatus ?? 'Listas dinámicas estilo EasyList / Peter Lowe'}
+          </span>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setAdblockStatus('Actualizando listas...');
+              void window.vidflow
+                .browserUpdateAdBlockLists()
+                .then((res) => setAdblockStatus(`Lista actualizada (${res.count} dominios)`))
+                .catch((err: Error) => setAdblockStatus(err.message));
+            }}
+          >
+            Actualizar listas EasyList
+          </Button>
+        </div>
       </SettingsSection>
 
       <SettingsSection title="Post-procesamiento y SponsorBlock">
@@ -247,7 +272,42 @@ export function SettingsPage(): JSX.Element {
               Actualizar motor
             </Button>
           )}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setWhisperStatus('Descargando Whisper.cpp...');
+              void window.vidflow
+                .installWhisper()
+                .then(() => setWhisperStatus('Whisper offline instalado'))
+                .catch((err: Error) => setWhisperStatus(err.message));
+            }}
+          >
+            Instalar Whisper offline
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void window.vidflow.checkAppUpdate().then(setAppUpdate);
+            }}
+          >
+            Buscar nueva versión (GitHub)
+          </Button>
         </div>
+        {whisperStatus && <p className="text-xs text-content-muted">{whisperStatus}</p>}
+        {appUpdate && (
+          <div className="flex items-center justify-between rounded-card border border-border bg-surface p-2.5 text-xs">
+            <span>
+              {appUpdate.updateAvailable
+                ? `Nueva versión disponible: ${appUpdate.latestVersion}`
+                : `VidFlow está actualizado (${appUpdate.latestVersion ?? 'v2'})`}
+            </span>
+            {appUpdate.updateAvailable && appUpdate.releaseUrl && (
+              <Button onClick={() => void window.vidflow.openExternal(appUpdate.releaseUrl!)}>
+                Descargar en GitHub
+              </Button>
+            )}
+          </div>
+        )}
       </SettingsSection>
     </div>
   );

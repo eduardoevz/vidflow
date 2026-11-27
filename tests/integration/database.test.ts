@@ -32,7 +32,7 @@ describe('database migrations', () => {
     const db = createDb();
     expect(() => runMigrations(db, migrationsDir)).not.toThrow();
     const count = db.prepare('SELECT COUNT(*) as c FROM schema_migrations').get() as { c: number };
-    expect(count.c).toBe(1);
+    expect(count.c).toBe(2);
   });
 });
 

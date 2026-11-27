@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Compass, Download, History, Settings, ArrowDownToLine } from 'lucide-react';
+import { Home, Compass, Download, History, Settings, ArrowDownToLine, Rss } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useDownloadsStore } from '../stores/downloadsStore';
 
@@ -14,6 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Inicio', icon: <Home size={18} /> },
   { to: '/browser', label: 'Navegador', icon: <Compass size={18} /> },
   { to: '/downloads', label: 'Descargas', icon: <Download size={18} /> },
+  { to: '/subscriptions', label: 'Suscripciones', icon: <Rss size={18} /> },
   { to: '/history', label: 'Historial', icon: <History size={18} /> },
   { to: '/settings', label: 'Ajustes', icon: <Settings size={18} /> },
 ];

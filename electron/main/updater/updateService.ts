@@ -1,20 +1,41 @@
-/**
- * Thin abstraction around the app's own update mechanism. No release feed is
- * configured yet (this project has no publish infrastructure set up), so
- * `checkForUpdates` currently reports "no update available" rather than
- * failing — see docs/ARCHITECTURE.md and README for how to point this at a
- * real release feed (e.g. GitHub Releases via `electron-updater`) later.
- */
 export interface UpdateCheckResult {
   updateAvailable: boolean;
   latestVersion?: string;
+  releaseUrl?: string;
+}
+
+export function parseReleaseNumber(tag: string): number {
+  const match = tag.trim().match(/^v?(\d+)$/i);
+  return match?.[1] ? Number(match[1]) : 0;
 }
 
 export class UpdateService {
-  constructor(private readonly currentVersion: string) {}
+  constructor(
+    private readonly currentTag: string,
+    private readonly repoSlug = 'eduardoevz/vidflow',
+  ) {}
 
-  checkForUpdates(): Promise<UpdateCheckResult> {
-    // Intentionally a no-op until a release feed exists (see docs/ARCHITECTURE.md §Updates).
-    return Promise.resolve({ updateAvailable: false, latestVersion: this.currentVersion });
+  async checkForUpdates(): Promise<UpdateCheckResult> {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${this.repoSlug}/releases/latest`, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'VidFlow-Updater',
+        },
+      });
+      if (!res.ok) {
+        return { updateAvailable: false, latestVersion: this.currentTag };
+      }
+      const data = (await res.json()) as { tag_name?: string; html_url?: string };
+      const latestTag = data.tag_name ?? this.currentTag;
+      const updateAvailable = parseReleaseNumber(latestTag) > parseReleaseNumber(this.currentTag);
+      return {
+        updateAvailable,
+        latestVersion: latestTag,
+        releaseUrl: data.html_url,
+      };
+    } catch {
+      return { updateAvailable: false, latestVersion: this.currentTag };
+    }
   }
 }

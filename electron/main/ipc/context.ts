@@ -6,6 +6,9 @@ import type { HistoryRepo } from '../database/historyRepo';
 import type { SettingsService } from '../services/settingsService';
 import type { HistoryFileService } from '../services/historyFileService';
 import type { EngineManager } from '../engines/engineManager';
+import type { SubscriptionsRepo } from '../database/subscriptionsRepo';
+import type { SubscriptionService } from '../services/subscriptionService';
+import type { UpdateService } from '../updater/updateService';
 
 export interface IpcContext {
   mainWindow: BrowserWindow;
@@ -16,5 +19,9 @@ export interface IpcContext {
   settingsService: SettingsService;
   historyFileService: HistoryFileService;
   engineManager: EngineManager;
+  subscriptionsRepo: SubscriptionsRepo;
+  subscriptionService: SubscriptionService;
+  updateService: UpdateService;
+  userDataDir: string;
   lastAnalyzedMedia: Map<string, import('../../../shared/media-types').MediaInfo>;
 }

@@ -1,14 +1,20 @@
-import { app, BrowserWindow, session, ipcMain } from 'electron';
+import { app, BrowserWindow, session, ipcMain, protocol, net } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { initLogger, getLogger } from './logging/logger';
 import { initDatabase } from './database/client';
 import { DownloadsRepo } from './database/downloadsRepo';
 import { HistoryRepo } from './database/historyRepo';
 import { MediaItemsRepo } from './database/mediaItemsRepo';
 import { SettingsRepo } from './database/settingsRepo';
+import { SubscriptionsRepo } from './database/subscriptionsRepo';
 import { SettingsService } from './services/settingsService';
 import { HistoryFileService } from './services/historyFileService';
+import { SubscriptionService } from './services/subscriptionService';
+import { UpdateService } from './updater/updateService';
+import { spawnSafe } from './security/spawnSafe';
+import { resolveWithinDirectory } from './security/paths';
 import { MediaAnalyzer } from './extraction/mediaAnalyzer';
 import { YtDlpAdapter } from './extraction/ytDlpAdapter';
 import { GenericMediaDetector } from './extraction/genericMediaDetector';
@@ -73,6 +79,13 @@ async function createMainWindow(): Promise<BrowserWindow> {
 }
 
 async function main(): Promise<void> {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'vidflow-media',
+      privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+  ]);
+
   await app.whenReady();
 
   const userDataDir = app.getPath('userData');
@@ -88,8 +101,27 @@ async function main(): Promise<void> {
   const historyRepo = new HistoryRepo(db);
   const mediaItemsRepo = new MediaItemsRepo(db);
   const settingsRepo = new SettingsRepo(db);
+  const subscriptionsRepo = new SubscriptionsRepo(db);
   const settingsService = new SettingsService(settingsRepo);
   const historyFileService = new HistoryFileService(historyRepo, mediaItemsRepo);
+  const updateService = new UpdateService('v2');
+
+  protocol.handle('vidflow-media', (request) => {
+    try {
+      const parsed = new URL(request.url);
+      const rawPath = parsed.searchParams.get('path');
+      if (!rawPath) return new Response('Missing path', { status: 400 });
+      const resolved = path.resolve(rawPath);
+      const downloadsDir = settingsService.getAll().downloadsDirectory;
+      const inHistory = historyRepo.list().some((h) => path.resolve(h.localPath) === resolved);
+      if (!inHistory) {
+        resolveWithinDirectory(downloadsDir, path.relative(downloadsDir, resolved));
+      }
+      return net.fetch(pathToFileURL(resolved).toString(), { headers: request.headers });
+    } catch {
+      return new Response('Forbidden', { status: 403 });
+    }
+  });
 
   const engineManager = new EngineManager(userDataDir, app.getVersion());
   try {
@@ -151,7 +183,25 @@ async function main(): Promise<void> {
     getFfmpegPath: () => engineManager.resolvedFfmpegPath(),
     getDownloadEngine: () => settingsService.getAll().downloadEngine,
     getConnectionsPerDownload: () => settingsService.getAll().connectionsPerDownload,
+    getMaxDownloadSpeedKbps: () => settingsService.getAll().maxDownloadSpeedKbps,
     getAria2Path: () => engineManager.resolvedAria2Path(),
+    reanalyzeUrl: async (originalUrl, referer) => {
+      const res = await mediaAnalyzer.analyze(originalUrl, referer ? { referer } : undefined);
+      if (!res.ok) return undefined;
+      return res.data.formats[0]?.url;
+    },
+    onQueueCompleted: () => {
+      const action = settingsService.getAll().postQueueAction;
+      if (action === 'none') return;
+      settingsService.update({ postQueueAction: 'none' });
+      if (process.platform === 'win32') {
+        if (action === 'sleep') {
+          spawnSafe('rundll32.exe', ['powrprof.dll,SetSuspendState', '0,1,0']);
+        } else if (action === 'shutdown') {
+          spawnSafe('shutdown', ['/s', '/t', '30']);
+        }
+      }
+    },
     prepareSessionContext: async (targetUrl) => {
       const [exported, cookieHeader] = await Promise.all([
         exportSessionCookiesToNetscapeFile(browserSession),
@@ -188,10 +238,19 @@ async function main(): Promise<void> {
         adBlockEnabled: s.adBlockEnabled,
         trackerBlockEnabled: s.trackerBlockEnabled,
         popupBlockEnabled: s.popupBlockEnabled,
+        whitelistedHosts: s.adBlockWhitelist,
       };
     },
     (items) => mainWindow.webContents.send(IPC_CHANNELS.browserMediaDetected, items),
   );
+
+  const subscriptionService = new SubscriptionService(
+    subscriptionsRepo,
+    mediaAnalyzer,
+    downloadManager,
+    settingsService,
+  );
+  subscriptionService.startAutoCheck();
 
   const ipcContext: IpcContext = {
     mainWindow,
@@ -202,6 +261,10 @@ async function main(): Promise<void> {
     settingsService,
     historyFileService,
     engineManager,
+    subscriptionsRepo,
+    subscriptionService,
+    updateService,
+    userDataDir,
     lastAnalyzedMedia: new Map(),
   };
 
@@ -235,6 +298,7 @@ async function main(): Promise<void> {
   let allowQuit = false;
   app.on('before-quit', () => {
     allowQuit = true;
+    subscriptionService.stop();
     void bridgeServer.stop();
   });
 
