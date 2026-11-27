@@ -21,6 +21,13 @@ export interface AppSettings {
   trackerBlockEnabled: boolean;
   popupBlockEnabled: boolean;
 
+  sponsorBlockEnabled: boolean;
+  sponsorBlockCategories: string[];
+
+  extensionBridgeEnabled: boolean;
+  extensionBridgePort: number;
+  extensionBridgeToken: string;
+
   closeBehavior: CloseBehavior;
 }
 
@@ -42,6 +49,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   adBlockEnabled: true,
   trackerBlockEnabled: true,
   popupBlockEnabled: true,
+
+  sponsorBlockEnabled: false,
+  sponsorBlockCategories: ['sponsor', 'selfpromo'],
+
+  extensionBridgeEnabled: true,
+  extensionBridgePort: 47832,
+  extensionBridgeToken: '',
 
   closeBehavior: 'ask',
 };

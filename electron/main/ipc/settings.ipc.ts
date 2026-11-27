@@ -20,6 +20,11 @@ const settingsPatchSchema = z
     adBlockEnabled: z.boolean().optional(),
     trackerBlockEnabled: z.boolean().optional(),
     popupBlockEnabled: z.boolean().optional(),
+    sponsorBlockEnabled: z.boolean().optional(),
+    sponsorBlockCategories: z.array(z.string().min(1)).optional(),
+    extensionBridgeEnabled: z.boolean().optional(),
+    extensionBridgePort: z.number().int().min(1024).max(65535).optional(),
+    extensionBridgeToken: z.string().optional(),
     closeBehavior: z.enum(['ask', 'minimize', 'quit']).optional(),
   })
   .strict();

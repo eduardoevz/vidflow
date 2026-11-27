@@ -66,6 +66,23 @@ export interface MediaInfo {
   extractor: 'yt-dlp' | 'generic' | 'manifest';
 }
 
+export interface PlaylistEntry {
+  id: string;
+  title: string;
+  url: string;
+  durationSeconds?: number;
+  thumbnailUrl?: string;
+  author?: string;
+}
+
+export interface PlaylistInfo {
+  id?: string;
+  title: string;
+  author?: string;
+  originalUrl: string;
+  entries: PlaylistEntry[];
+}
+
 export type AnalysisErrorCode =
   | 'invalid_url'
   | 'unsupported_site'

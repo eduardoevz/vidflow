@@ -1,5 +1,5 @@
 import type { MediaFormat, MediaInfo, QualityPreset } from './media-types';
-import type { DownloadRequest } from './download-types';
+import type { ClipRange, DownloadRequest } from './download-types';
 import { selectFormatForPreset, bestAudio } from './qualitySelection';
 
 export interface BuildDownloadRequestInput {
@@ -9,6 +9,11 @@ export interface BuildDownloadRequestInput {
   formatId?: string;
   audioFormatId?: string;
   preset?: QualityPreset;
+  subtitleLanguages?: string[];
+  embedSubtitles?: boolean;
+  writeSubtitles?: boolean;
+  clipRange?: ClipRange;
+  sponsorBlockCategories?: string[];
 }
 
 export function buildDownloadRequest(input: BuildDownloadRequestInput): DownloadRequest {
@@ -44,6 +49,10 @@ export function buildDownloadRequest(input: BuildDownloadRequestInput): Download
   }
 
   const audioOnly = !video && Boolean(audio);
+  const combinedFilesize =
+    video && audio && video !== audio && video.filesizeBytes !== undefined
+      ? video.filesizeBytes + (audio.filesizeBytes ?? 0)
+      : primary.filesizeBytes;
 
   return {
     originalUrl: media.metadata.originalUrl,
@@ -55,7 +64,7 @@ export function buildDownloadRequest(input: BuildDownloadRequestInput): Download
     audioFormatId: video && audio && video !== audio ? audio.formatId : undefined,
     extension: audioOnly ? 'm4a' : primary.extension,
     resolutionLabel: video?.kind === 'video' ? video.resolutionLabel : undefined,
-    filesizeBytes: primary.filesizeBytes,
+    filesizeBytes: combinedFilesize,
     filesizeIsEstimate: primary.filesizeIsEstimate,
     filenameTemplate: input.filenameTemplate,
     useYtDlp: media.extractor === 'yt-dlp',
@@ -63,5 +72,10 @@ export function buildDownloadRequest(input: BuildDownloadRequestInput): Download
     protocol: primary.protocol,
     referer: media.metadata.referer,
     audioOnly,
+    subtitleLanguages: input.subtitleLanguages?.length ? input.subtitleLanguages : undefined,
+    embedSubtitles: input.embedSubtitles,
+    writeSubtitles: input.writeSubtitles,
+    clipRange: input.clipRange,
+    sponsorBlockCategories: input.sponsorBlockCategories?.length ? input.sponsorBlockCategories : undefined,
   };
 }

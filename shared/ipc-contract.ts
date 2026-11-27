@@ -1,4 +1,4 @@
-import type { MediaInfo, AnalysisError, AnalysisOptions } from './media-types';
+import type { MediaInfo, PlaylistInfo, AnalysisError, AnalysisOptions } from './media-types';
 import type { DownloadProgress, DownloadRecord, DownloadRequest } from './download-types';
 import type { AppSettings } from './settings-types';
 
@@ -38,6 +38,7 @@ export interface BrowserNavigationState {
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  blockedCount?: number;
 }
 
 export interface BrowserBounds {
@@ -57,12 +58,23 @@ export interface DetectedBrowserMedia {
   detectedAt: number;
 }
 
+export interface ExtensionCapturedMedia {
+  url: string;
+  pageUrl?: string;
+  title?: string;
+  referer?: string;
+}
+
 /** Single source of truth for every channel exposed on window.vidflow. */
 export interface VidFlowApi {
   analyzeUrl(
     url: string,
     options?: AnalysisOptions,
   ): Promise<{ ok: true; data: MediaInfo } | { ok: false; error: AnalysisError }>;
+  analyzePlaylist(
+    url: string,
+    options?: AnalysisOptions,
+  ): Promise<{ ok: true; data: PlaylistInfo } | { ok: false; error: AnalysisError }>;
 
   startDownload(request: DownloadRequest): Promise<{ taskId: string }>;
   pauseDownload(taskId: string): Promise<void>;
@@ -101,6 +113,7 @@ export interface VidFlowApi {
   browserGetDetectedMedia(): Promise<DetectedBrowserMedia[]>;
   browserClearDetectedMedia(): Promise<void>;
   onBrowserMediaDetected(callback: (items: DetectedBrowserMedia[]) => void): () => void;
+  onExtensionMediaCaptured(callback: (item: ExtensionCapturedMedia) => void): () => void;
 
   confirmQuit(): Promise<void>;
   minimizeToTray(): Promise<void>;

@@ -4,6 +4,7 @@ import type { VidFlowApi } from '../../shared/ipc-contract';
 
 const api: VidFlowApi = {
   analyzeUrl: (url, options) => ipcRenderer.invoke(IPC_CHANNELS.analyzeUrl, url, options),
+  analyzePlaylist: (url, options) => ipcRenderer.invoke(IPC_CHANNELS.analyzePlaylist, url, options),
 
   startDownload: (request) => ipcRenderer.invoke(IPC_CHANNELS.startDownload, request),
   pauseDownload: (taskId) => ipcRenderer.invoke(IPC_CHANNELS.pauseDownload, taskId),
@@ -56,6 +57,12 @@ const api: VidFlowApi = {
       callback(items);
     ipcRenderer.on(IPC_CHANNELS.browserMediaDetected, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.browserMediaDetected, listener);
+  },
+  onExtensionMediaCaptured: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, item: Parameters<typeof callback>[0]) =>
+      callback(item);
+    ipcRenderer.on(IPC_CHANNELS.extensionMediaCaptured, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.extensionMediaCaptured, listener);
   },
 
   confirmQuit: () => ipcRenderer.invoke(IPC_CHANNELS.confirmQuit),

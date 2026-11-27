@@ -24,6 +24,11 @@ export interface DownloadProgress {
   errorMessage?: string;
 }
 
+export interface ClipRange {
+  startSeconds: number;
+  endSeconds: number;
+}
+
 export interface DownloadRequest {
   originalUrl: string;
   title: string;
@@ -47,6 +52,16 @@ export interface DownloadRequest {
   /** optional Referer header to pass when fetching protected streams */
   referer?: string;
   audioOnly: boolean;
+  /** Optional subtitle language codes to download (e.g. ['es', 'en']) */
+  subtitleLanguages?: string[];
+  /** Embed downloaded subtitles into the output container when supported */
+  embedSubtitles?: boolean;
+  /** Write standalone subtitle files (.srt/.vtt) alongside the media file */
+  writeSubtitles?: boolean;
+  /** Optional time-range trim for clipping a segment */
+  clipRange?: ClipRange;
+  /** Optional SponsorBlock categories to remove (e.g. ['sponsor', 'selfpromo']) */
+  sponsorBlockCategories?: string[];
 }
 
 export interface DownloadRecord {

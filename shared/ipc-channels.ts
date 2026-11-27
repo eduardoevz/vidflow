@@ -6,6 +6,7 @@
  */
 export const IPC_CHANNELS = {
   analyzeUrl: 'vidflow:analyzeUrl',
+  analyzePlaylist: 'vidflow:analyzePlaylist',
   startDownload: 'vidflow:startDownload',
   pauseDownload: 'vidflow:pauseDownload',
   resumeDownload: 'vidflow:resumeDownload',
@@ -43,6 +44,7 @@ export const IPC_CHANNELS = {
   browserGetDetectedMedia: 'vidflow:browserGetDetectedMedia',
   browserClearDetectedMedia: 'vidflow:browserClearDetectedMedia',
   browserMediaDetected: 'vidflow:browserMediaDetected',
+  extensionMediaCaptured: 'vidflow:extensionMediaCaptured',
 
   confirmQuit: 'vidflow:confirmQuit',
   requestCloseConfirmation: 'vidflow:requestCloseConfirmation',

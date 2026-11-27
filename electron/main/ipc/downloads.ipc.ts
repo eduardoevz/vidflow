@@ -21,6 +21,19 @@ const downloadRequestSchema = z.object({
   protocol: z.enum(['https', 'http', 'hls', 'dash', 'direct']).optional(),
   referer: z.string().optional(),
   audioOnly: z.boolean(),
+  subtitleLanguages: z.array(z.string().min(1)).optional(),
+  embedSubtitles: z.boolean().optional(),
+  writeSubtitles: z.boolean().optional(),
+  clipRange: z
+    .object({
+      startSeconds: z.number().min(0),
+      endSeconds: z.number().positive(),
+    })
+    .refine((r) => r.endSeconds > r.startSeconds, {
+      message: 'El tiempo de fin debe ser mayor al tiempo de inicio.',
+    })
+    .optional(),
+  sponsorBlockCategories: z.array(z.string().min(1)).optional(),
 });
 
 const taskIdSchema = z.string().regex(/^\d+$/, 'taskId debe ser el id numérico de la descarga');
