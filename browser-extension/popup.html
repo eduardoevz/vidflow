@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>VidFlow Companion</title>
+    <style>
+      body {
+        width: 340px;
+        margin: 0;
+        padding: 14px;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      input {
+        flex: 1;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: #f8fafc;
+        font-size: 12px;
+      }
+      button {
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 6px;
+        background: #6366f1;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #334155;
+      }
+      .list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 10px;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: #1e293b;
+        font-size: 11px;
+      }
+      .url {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
+      #status {
+        margin-top: 8px;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>VidFlow Companion</h1>
+    <div class="row">
+      <input id="tokenInput" type="password" placeholder="Token de VidFlow (Ajustes)" />
+      <button id="saveTokenBtn" class="secondary">Guardar</button>
+    </div>
+    <button id="sendPageBtn" style="width: 100%">Enviar página actual a VidFlow</button>
+    <div id="streamsList" class="list"></div>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

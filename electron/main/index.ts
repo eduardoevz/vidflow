@@ -23,6 +23,7 @@ import { BROWSER_PARTITION, BrowserViewController } from './browser/browserViewC
 import { exportSessionCookiesToNetscapeFile, getCookieHeaderForUrl } from './browser/cookieExporter';
 import { TrayController, defaultTrayIconPath } from './tray/trayController';
 import { notifyDownloadCompleted, notifyDownloadFailed } from './notifications/notify';
+import { ExtensionBridgeServer, generateBridgeToken } from './bridge/extensionBridgeServer';
 import type { CloseBehavior } from '../../shared/settings-types';
 
 const isDev = !app.isPackaged && process.env.VIDFLOW_USE_DIST !== '1';
@@ -183,7 +184,11 @@ async function main(): Promise<void> {
     (state) => mainWindow.webContents.send(IPC_CHANNELS.browserNavigationState, state),
     () => {
       const s = settingsService.getAll();
-      return { adBlockEnabled: s.adBlockEnabled, trackerBlockEnabled: s.trackerBlockEnabled };
+      return {
+        adBlockEnabled: s.adBlockEnabled,
+        trackerBlockEnabled: s.trackerBlockEnabled,
+        popupBlockEnabled: s.popupBlockEnabled,
+      };
     },
     (items) => mainWindow.webContents.send(IPC_CHANNELS.browserMediaDetected, items),
   );
@@ -205,9 +210,32 @@ async function main(): Promise<void> {
   const tray = new TrayController(mainWindow);
   tray.init(defaultTrayIconPath());
 
+  if (!settingsService.getAll().extensionBridgeToken) {
+    settingsService.update({ extensionBridgeToken: generateBridgeToken() });
+  }
+
+  const bridgeServer = new ExtensionBridgeServer({
+    port: settingsService.getAll().extensionBridgePort,
+    getToken: () => settingsService.getAll().extensionBridgeToken,
+    getAppVersion: () => app.getVersion(),
+    onCapture: (payload) => {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.webContents.send(IPC_CHANNELS.extensionMediaCaptured, payload);
+    },
+  });
+
+  if (settingsService.getAll().extensionBridgeEnabled) {
+    bridgeServer.start().catch((err) => {
+      logger.warn('main', 'Extension bridge failed to start', { error: (err as Error).message });
+    });
+  }
+
   let allowQuit = false;
   app.on('before-quit', () => {
     allowQuit = true;
+    void bridgeServer.stop();
   });
 
   mainWindow.on('close', (event) => {

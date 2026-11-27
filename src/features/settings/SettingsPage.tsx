@@ -134,6 +134,60 @@ export function SettingsPage(): JSX.Element {
         />
       </SettingsSection>
 
+      <SettingsSection title="Post-procesamiento y SponsorBlock">
+        <ToggleRow
+          label="Activar SponsorBlock por defecto"
+          checked={settings.sponsorBlockEnabled}
+          onChange={(v) => void update({ sponsorBlockEnabled: v })}
+        />
+        <label className="flex items-center justify-between text-sm text-content">
+          Categorías a omitir
+          <input
+            value={settings.sponsorBlockCategories.join(', ')}
+            onChange={(e) =>
+              void update({
+                sponsorBlockCategories: e.target.value
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            placeholder="sponsor, selfpromo"
+            className="focus-ring w-56 rounded-card border border-border bg-surface px-2 py-1 text-sm"
+          />
+        </label>
+      </SettingsSection>
+
+      <SettingsSection title="Extensión de Navegador (Bridge Local)">
+        <ToggleRow
+          label="Habilitar conexión con extensión (127.0.0.1)"
+          checked={settings.extensionBridgeEnabled}
+          onChange={(v) => void update({ extensionBridgeEnabled: v })}
+        />
+        <div className="flex items-center justify-between text-sm text-content">
+          <span>Puerto local</span>
+          <span className="font-mono text-xs text-content-muted">{settings.extensionBridgePort}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2 text-sm text-content">
+          <span>Token de emparejamiento</span>
+          <div className="flex items-center gap-2">
+            <code className="max-w-[180px] truncate rounded bg-surface-sunken px-2 py-1 text-xs text-content-muted">
+              {settings.extensionBridgeToken || 'Generando...'}
+            </code>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                if (settings.extensionBridgeToken) {
+                  void window.vidflow.copyToClipboard(settings.extensionBridgeToken);
+                }
+              }}
+            >
+              Copiar
+            </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
       <SettingsSection title="Al cerrar">
         <div className="flex flex-col gap-2 text-sm text-content">
           {(['ask', 'minimize', 'quit'] as const).map((option) => (

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Layout } from './Layout';
 import { CloseConfirmation } from './CloseConfirmation';
 import { useAppliedTheme } from '../hooks/useAppliedTheme';
@@ -12,8 +12,15 @@ import { HistoryPage } from '../features/history/HistoryPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 
 function ThemedApp(): JSX.Element {
+  const navigate = useNavigate();
   useAppliedTheme();
   useKeyboardShortcuts();
+
+  useEffect(() => {
+    return window.vidflow.onExtensionMediaCaptured((item) => {
+      void navigate('/', { state: { analyzeUrl: item.url, referer: item.referer ?? item.pageUrl } });
+    });
+  }, [navigate]);
 
   return (
     <>
