@@ -1,15 +1,50 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, RotateCw, ExternalLink, Film, Download, Trash2, Globe } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  Film,
+  Globe,
+  PanelRightClose,
+  RotateCw,
+  Shield,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '../../components/Button';
-import { formatBytes } from '../../utils/format';
+import { formatBytes, formatDuration } from '../../utils/format';
+import { buildDownloadRequest } from '../../../shared/downloadRequestBuilder';
+import { bestAudio } from '../../../shared/qualitySelection';
+import type { MediaFormat, MediaInfo } from '../../../shared/media-types';
 import type { BrowserNavigationState, DetectedBrowserMedia } from '../../../shared/ipc-contract';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 const URL_PATTERN = /^https?:\/\/\S+$/i;
+
+function formatOptionLabel(format: MediaFormat): string {
+  if (format.kind === 'video') {
+    return [
+      format.resolutionLabel ?? (format.bitrateKbps ? `${Math.round(format.bitrateKbps)} kbps` : 'Video'),
+      format.fps ? `${format.fps} FPS` : undefined,
+      format.extension.toUpperCase(),
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  return [
+    format.audioCodec?.toUpperCase() ?? format.extension.toUpperCase(),
+    format.bitrateKbps ? `${Math.round(format.bitrateKbps)} kbps` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 export function BrowserPage(): JSX.Element {
   const routerNavigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const filenameTemplate = useSettingsStore((s) => s.settings.filenameTemplate);
   const [addressBar, setAddressBar] = useState('https://');
   const [detectedMedia, setDetectedMedia] = useState<DetectedBrowserMedia[]>([]);
   const [showDetected, setShowDetected] = useState(false);
@@ -19,6 +54,14 @@ export function BrowserPage(): JSX.Element {
     canGoForward: false,
     isLoading: false,
   });
+
+  // Lateral quality-picker panel state
+  const [showSidePanel, setShowSidePanel] = useState(false);
+  const [analyzingPage, setAnalyzingPage] = useState(false);
+  const [pageMedia, setPageMedia] = useState<MediaInfo | undefined>(undefined);
+  const [panelError, setPanelError] = useState<string | undefined>(undefined);
+  const [downloadingFormatId, setDownloadingFormatId] = useState<string | undefined>(undefined);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   useEffect(() => {
     const unsubscribeNav = window.vidflow.onBrowserNavigationState((s) => {
@@ -53,12 +96,16 @@ export function BrowserPage(): JSX.Element {
   useEffect(() => {
     updateBounds();
     window.addEventListener('resize', updateBounds);
+    const el = containerRef.current;
+    const observer = el ? new ResizeObserver(() => updateBounds()) : undefined;
+    if (el && observer) observer.observe(el);
     const interval = setInterval(updateBounds, 400);
     return () => {
       window.removeEventListener('resize', updateBounds);
+      observer?.disconnect();
       clearInterval(interval);
     };
-  }, [updateBounds, showDetected, detectedMedia.length]);
+  }, [updateBounds, showDetected, showSidePanel, detectedMedia.length]);
 
   function navigate(): void {
     const target = URL_PATTERN.test(addressBar) ? addressBar : `https://${addressBar}`;
@@ -73,6 +120,76 @@ export function BrowserPage(): JSX.Element {
       },
     });
   }
+
+  async function openQuickDownload(targetUrl?: string, referer?: string): Promise<void> {
+    const urlToAnalyze = targetUrl ?? state.url;
+    if (!URL_PATTERN.test(urlToAnalyze)) return;
+
+    setShowSidePanel(true);
+    setAnalyzingPage(true);
+    setPageMedia(undefined);
+    setPanelError(undefined);
+    setDownloadSuccess(false);
+
+    try {
+      const res = await window.vidflow.analyzeUrl(urlToAnalyze, referer ? { referer } : undefined);
+      if (res.ok) {
+        setPageMedia(res.data);
+      } else if (!targetUrl && detectedMedia[0]) {
+        // Fallback: if page URL itself isn't supported directly, try the latest sniffed stream
+        const fallback = await window.vidflow.analyzeUrl(detectedMedia[0].url, {
+          referer: detectedMedia[0].referer ?? urlToAnalyze,
+        });
+        if (fallback.ok) {
+          setPageMedia(fallback.data);
+        } else {
+          setPanelError(res.error.suggestion ?? res.error.message);
+        }
+      } else {
+        setPanelError(res.error.suggestion ?? res.error.message);
+      }
+    } catch (err) {
+      setPanelError((err as Error).message);
+    } finally {
+      setAnalyzingPage(false);
+    }
+  }
+
+  async function handleDownloadFormat(formatId: string): Promise<void> {
+    if (!pageMedia) return;
+    setDownloadingFormatId(formatId);
+    setPanelError(undefined);
+    setDownloadSuccess(false);
+    try {
+      const request = buildDownloadRequest({
+        media: pageMedia,
+        filenameTemplate,
+        formatId,
+      });
+      await window.vidflow.startDownload(request);
+      setDownloadSuccess(true);
+    } catch (err) {
+      setPanelError((err as Error).message);
+    } finally {
+      setDownloadingFormatId(undefined);
+    }
+  }
+
+  const sortedFormats = useMemo(() => {
+    if (!pageMedia) return [];
+    const videos = pageMedia.formats
+      .filter((f) => f.kind === 'video')
+      .sort((a, b) => (b.kind === 'video' && a.kind === 'video' ? (b.height ?? 0) - (a.height ?? 0) : 0));
+    const audios = pageMedia.formats.filter((f) => f.kind === 'audio');
+    return [...videos, ...audios];
+  }, [pageMedia]);
+
+  const pairedAudio = useMemo(
+    () => (pageMedia ? bestAudio(pageMedia.formats) : undefined),
+    [pageMedia],
+  );
+
+  const canDownloadCurrentPage = URL_PATTERN.test(state.url);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col gap-3">
@@ -113,6 +230,14 @@ export function BrowserPage(): JSX.Element {
             className="w-full bg-transparent text-sm text-content focus:outline-none"
           />
         </div>
+
+        <span
+          title="Escudo activo: anuncios, rastreadores y popups bloqueados en esta página"
+          className="inline-flex items-center gap-1 rounded-card border border-amber-500/30 bg-amber-500/12 px-2.5 py-1.5 text-xs font-semibold text-amber-500"
+        >
+          <Shield size={14} />
+          {state.blockedCount ?? 0}
+        </span>
 
         {detectedMedia.length > 0 && (
           <Button
@@ -171,19 +296,136 @@ export function BrowserPage(): JSX.Element {
                 </div>
                 <p className="truncate text-xs text-content-muted">{item.url}</p>
               </div>
-              <Button onClick={() => handleAnalyzeDetected(item)}>
-                <Download size={14} />
-                Analizar
-              </Button>
+              <div className="flex shrink-0 gap-1.5">
+                <Button
+                  variant="secondary"
+                  onClick={() => void openQuickDownload(item.url, item.referer ?? (state.url || undefined))}
+                >
+                  <Download size={14} />
+                  Calidades
+                </Button>
+                <Button onClick={() => handleAnalyzeDetected(item)}>Analizar</Button>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      <div
-        ref={containerRef}
-        className="min-h-[300px] flex-1 overflow-hidden rounded-xl border border-border bg-surface-sunken shadow-inner"
-      />
+      <div className="flex min-h-0 flex-1 gap-3">
+        <div
+          ref={containerRef}
+          className="min-h-[300px] flex-1 overflow-hidden rounded-xl border border-border bg-surface-sunken shadow-inner"
+        />
+
+        {showSidePanel && (
+          <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-hidden rounded-xl border border-border bg-surface-raised p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-2 border-b border-border pb-2.5">
+              <span className="text-sm font-semibold text-content">Descargar video</span>
+              <button
+                type="button"
+                onClick={() => setShowSidePanel(false)}
+                className="rounded-md p-1 text-content-muted hover:bg-surface-sunken hover:text-content"
+                title="Cerrar panel"
+              >
+                <PanelRightClose size={16} />
+              </button>
+            </div>
+
+            {analyzingPage && (
+              <div className="flex items-center gap-2.5 py-6 text-xs text-content-muted">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                Analizando calidades y tamaños...
+              </div>
+            )}
+
+            {panelError && (
+              <div className="flex flex-col gap-2 rounded-card border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500">
+                <p>{panelError}</p>
+                <Button variant="secondary" onClick={() => void openQuickDownload()}>
+                  Reintentar
+                </Button>
+              </div>
+            )}
+
+            {downloadSuccess && (
+              <div className="flex items-center justify-between gap-2 rounded-card border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <CheckCircle2 size={14} />
+                  Añadido a la cola
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void routerNavigate('/downloads')}
+                  className="font-semibold underline-offset-2 hover:underline"
+                >
+                  Ver
+                </button>
+              </div>
+            )}
+
+            {pageMedia && (
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <p className="line-clamp-2 text-xs font-semibold text-content">
+                    {pageMedia.metadata.title}
+                  </p>
+                  <p className="text-[11px] text-content-muted">
+                    {pageMedia.metadata.siteName}
+                    {pageMedia.metadata.durationSeconds
+                      ? ` · ${formatDuration(pageMedia.metadata.durationSeconds)}`
+                      : ''}
+                  </p>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto rounded-xl border border-border bg-surface">
+                  {sortedFormats.map((format) => {
+                    const extraAudioBytes =
+                      format.kind === 'video' && !format.hasAudio ? (pairedAudio?.filesizeBytes ?? 0) : 0;
+                    const totalBytes =
+                      format.filesizeBytes !== undefined ? format.filesizeBytes + extraAudioBytes : undefined;
+                    const isBusy = downloadingFormatId === format.formatId;
+
+                    return (
+                      <button
+                        key={format.formatId}
+                        type="button"
+                        disabled={Boolean(downloadingFormatId)}
+                        onClick={() => void handleDownloadFormat(format.formatId)}
+                        className="flex items-center justify-between gap-2 px-3 py-2.5 text-left text-xs transition-colors hover:bg-accent/10 disabled:opacity-50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-content">{formatOptionLabel(format)}</p>
+                          <p className="text-[11px] text-content-muted">
+                            {formatBytes(totalBytes, format.filesizeIsEstimate)}
+                          </p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-card bg-accent/15 px-2.5 py-1 text-[11px] font-semibold text-accent">
+                          <Download size={12} />
+                          {isBusy ? '...' : 'Bajar'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
+      </div>
+
+      {canDownloadCurrentPage && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised px-3 py-2 shadow-sm">
+          <span className="truncate text-xs text-content-muted">{state.url}</span>
+          <Button
+            onClick={() => void openQuickDownload()}
+            disabled={analyzingPage}
+            title="Analizar y descargar video de la página actual"
+          >
+            <Download size={15} />
+            {analyzingPage ? 'Analizando...' : 'Descargar video de esta página'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

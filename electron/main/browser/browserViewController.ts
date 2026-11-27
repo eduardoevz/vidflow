@@ -1,5 +1,10 @@
 import { BrowserView, type BrowserWindow, type Session, session, shell } from 'electron';
-import { installAdBlock, type AdBlockOptions } from './adBlockFilter';
+import {
+  COSMETIC_ADBLOCK_CSS,
+  installAdBlock,
+  shouldBlockUrl,
+  type AdBlockOptions,
+} from './adBlockFilter';
 import { MediaSniffer } from './mediaSniffer';
 import { isHttpUrl } from '../security/paths';
 import type { DetectedBrowserMedia } from '../../../shared/ipc-contract';
@@ -11,11 +16,13 @@ export interface NavigationState {
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
+  blockedCount?: number;
 }
 
 export class BrowserViewController {
   private view: BrowserView | undefined;
   private readonly sniffer: MediaSniffer;
+  private blockedCount = 0;
 
   constructor(
     private readonly parentWindow: BrowserWindow,
@@ -61,14 +68,23 @@ export class BrowserViewController {
       },
     });
 
-    // Popup policy: never open an in-app popup window; route to the
-    // default external browser instead (spec §9/§10).
+    // Brave-style popup policy: block all window.open / target="_blank" popups
+    // when popupBlockEnabled is true; otherwise fall back to external browser.
     this.view.webContents.setWindowOpenHandler(({ url }) => {
+      const opts = this.getAdBlockOptions();
+      if (opts.popupBlockEnabled !== false || shouldBlockUrl(url)) {
+        this.blockedCount += 1;
+        this.emitState();
+        return { action: 'deny' };
+      }
       if (isHttpUrl(url)) void shell.openExternal(url);
       return { action: 'deny' };
     });
 
-    installAdBlock(this.view.webContents.session, this.getAdBlockOptions);
+    installAdBlock(this.view.webContents.session, this.getAdBlockOptions, () => {
+      this.blockedCount += 1;
+      this.emitState();
+    });
     this.sniffer.installOnSession(this.view.webContents.session, () => ({
       pageUrl: this.view?.webContents.getURL() ?? '',
       pageTitle: this.view?.webContents.getTitle() ?? '',
@@ -76,15 +92,30 @@ export class BrowserViewController {
 
     this.view.webContents.on('did-start-loading', () => this.emitState());
     this.view.webContents.on('did-stop-loading', () => this.emitState());
+    this.view.webContents.on('dom-ready', () => {
+      if (this.getAdBlockOptions().adBlockEnabled) {
+        void this.view?.webContents.insertCSS(COSMETIC_ADBLOCK_CSS).catch(() => undefined);
+      }
+    });
     this.view.webContents.on('did-navigate', () => {
+      this.blockedCount = 0;
       this.sniffer.clear();
       this.emitState();
     });
     this.view.webContents.on('did-navigate-in-page', () => this.emitState());
 
-    // Only http(s) navigations are permitted inside the embedded browser.
+    // Only http(s) navigations are permitted, and block top-level redirects to ad domains.
     this.view.webContents.on('will-navigate', (event, url) => {
-      if (!isHttpUrl(url)) event.preventDefault();
+      if (!isHttpUrl(url)) {
+        event.preventDefault();
+        return;
+      }
+      const opts = this.getAdBlockOptions();
+      if ((opts.adBlockEnabled || opts.popupBlockEnabled !== false) && shouldBlockUrl(url)) {
+        event.preventDefault();
+        this.blockedCount += 1;
+        this.emitState();
+      }
     });
 
     this.parentWindow.addBrowserView(this.view);
@@ -99,6 +130,7 @@ export class BrowserViewController {
       canGoBack: wc.navigationHistory.canGoBack(),
       canGoForward: wc.navigationHistory.canGoForward(),
       isLoading: wc.isLoading(),
+      blockedCount: this.blockedCount,
     });
   }
 
