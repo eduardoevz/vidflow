@@ -115,3 +115,52 @@ export async function trimMediaFile(
     });
   });
 }
+
+export async function convertMediaFile(
+  ffmpegPath: string,
+  inputPath: string,
+  outputPath: string,
+  profile: 'mp3' | 'mp4_compact' | 'gif',
+): Promise<void> {
+  const args =
+    profile === 'mp3'
+      ? ['-y', '-i', inputPath, '-vn', '-acodec', 'libmp3lame', '-b:a', '192k', outputPath]
+      : profile === 'mp4_compact'
+        ? [
+            '-y',
+            '-i',
+            inputPath,
+            '-c:v',
+            'libx264',
+            '-crf',
+            '28',
+            '-preset',
+            'veryfast',
+            '-c:a',
+            'aac',
+            '-b:a',
+            '128k',
+            outputPath,
+          ]
+        : [
+            '-y',
+            '-i',
+            inputPath,
+            '-vf',
+            'fps=12,scale=480:-1:flags=lanczos',
+            '-loop',
+            '0',
+            outputPath,
+          ];
+
+  return new Promise((resolve, reject) => {
+    const child = spawnSafe(ffmpegPath, args);
+    let stderr = '';
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf-8')));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new FfmpegError(stderr.slice(-800)));
+    });
+  });
+}

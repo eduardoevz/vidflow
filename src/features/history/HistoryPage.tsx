@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react';
-import { History as HistoryIcon, FolderOpen, Play, Link as LinkIcon, Copy, Check, Trash2, Search } from 'lucide-react';
-import type { HistoryFilter, HistoryRecord } from '../../../shared/ipc-contract';
+import {
+  History as HistoryIcon,
+  FolderOpen,
+  Play,
+  Link as LinkIcon,
+  Copy,
+  Check,
+  Trash2,
+  Search,
+  Subtitles,
+  Wand2,
+  X,
+} from 'lucide-react';
+import type { ConvertProfile, HistoryFilter, HistoryRecord } from '../../../shared/ipc-contract';
 import { EmptyState } from '../../components/EmptyState';
 import { Button } from '../../components/Button';
+import { VideoPlayer } from '../player/VideoPlayer';
 import { formatBytes } from '../../utils/format';
 
 export function HistoryPage(): JSX.Element {
@@ -12,6 +25,38 @@ export function HistoryPage(): JSX.Element {
   const [copiedId, setCopiedId] = useState<number | undefined>(undefined);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | undefined>(undefined);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [playingRecord, setPlayingRecord] = useState<HistoryRecord | undefined>(undefined);
+  const [busyActionId, setBusyActionId] = useState<number | undefined>(undefined);
+  const [actionNotice, setActionNotice] = useState<string | undefined>(undefined);
+  const [actionError, setActionError] = useState<string | undefined>(undefined);
+
+  async function handleConvert(record: HistoryRecord, profile: ConvertProfile) {
+    setBusyActionId(record.id);
+    setActionNotice(undefined);
+    setActionError(undefined);
+    try {
+      const res = await window.vidflow.convertHistoryFile(record.id, profile);
+      setActionNotice(`Convertido correctamente: ${res.outputPath}`);
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setBusyActionId(undefined);
+    }
+  }
+
+  async function handleTranscribe(record: HistoryRecord) {
+    setBusyActionId(record.id);
+    setActionNotice(undefined);
+    setActionError(undefined);
+    try {
+      const res = await window.vidflow.transcribeHistoryFile(record.id);
+      setActionNotice(`Subtítulos generados (Whisper): ${res.srtPath}`);
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setBusyActionId(undefined);
+    }
+  }
 
   async function load(filter: HistoryFilter = {}): Promise<void> {
     setRecords(await window.vidflow.listHistory(filter));
@@ -66,6 +111,17 @@ export function HistoryPage(): JSX.Element {
         </select>
       </div>
 
+      {actionNotice && (
+        <p className="rounded-card border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs text-emerald-500">
+          {actionNotice}
+        </p>
+      )}
+      {actionError && (
+        <p className="rounded-card border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-500">
+          {actionError}
+        </p>
+      )}
+
       <div className="flex flex-col gap-2.5">
         {records.map((record) => (
           <div
@@ -87,9 +143,46 @@ export function HistoryPage(): JSX.Element {
                   .join(' · ')}
               </p>
             </div>
-            <div className="flex shrink-0 gap-1">
-              <Button variant="ghost" title="Reproducir" onClick={() => void window.vidflow.openFile(record.localPath)}>
+            <div className="flex shrink-0 flex-wrap items-center gap-1">
+              <Button variant="ghost" title="Reproducir en VidFlow" onClick={() => setPlayingRecord(record)}>
                 <Play size={16} />
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={busyActionId === record.id}
+                title="Convertir a MP3"
+                onClick={() => void handleConvert(record, 'mp3')}
+                className="px-2 text-[11px]"
+              >
+                <Wand2 size={13} />
+                MP3
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={busyActionId === record.id}
+                title="Comprimir MP4"
+                onClick={() => void handleConvert(record, 'mp4_compact')}
+                className="px-2 text-[11px]"
+              >
+                MP4
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={busyActionId === record.id}
+                title="Generar subtítulos .srt con Whisper offline"
+                onClick={() => void handleTranscribe(record)}
+                className="px-2 text-[11px]"
+              >
+                <Subtitles size={13} />
+                SRT
+              </Button>
+              <Button
+                variant="ghost"
+                title="Abrir con reproductor externo"
+                onClick={() => void window.vidflow.openFile(record.localPath)}
+                className="px-2 text-[11px]"
+              >
+                Abrir
               </Button>
               <Button
                 variant="ghost"
@@ -123,6 +216,28 @@ export function HistoryPage(): JSX.Element {
           </div>
         ))}
       </div>
+
+      {playingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="flex w-full max-w-3xl flex-col gap-3 rounded-xl border border-border bg-surface-raised p-4 shadow-xl">
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-content">{playingRecord.title}</p>
+              <button
+                type="button"
+                onClick={() => setPlayingRecord(undefined)}
+                className="rounded-md p-1 text-content-muted hover:bg-surface-sunken hover:text-content"
+                title="Cerrar reproductor"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <VideoPlayer
+              src={`vidflow-media://local?path=${encodeURIComponent(playingRecord.localPath)}`}
+              protocol="direct"
+            />
+          </div>
+        </div>
+      )}
 
       {confirmDeleteId !== undefined && (
         <ConfirmDeleteDialog
