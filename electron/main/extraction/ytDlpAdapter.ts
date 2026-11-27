@@ -2,7 +2,7 @@ import { spawnSafe } from '../security/spawnSafe';
 import { normalizeMediaInfo } from './normalizeMediaInfo';
 import { AnalysisFailure, type ExtractionContext, type ExtractionStrategy } from './types';
 import type { YtDlpInfoJson } from './ytDlpJson';
-import type { MediaInfo } from '../../../shared/media-types';
+import type { MediaInfo, PlaylistEntry, PlaylistInfo } from '../../../shared/media-types';
 import { getLogger } from '../logging/logger';
 
 const KNOWN_ERROR_PATTERNS: { pattern: RegExp; code: AnalysisFailure['code']; suggestion: string }[] = [
@@ -99,4 +99,93 @@ export class YtDlpAdapter implements ExtractionStrategy {
       });
     });
   }
+
+  async analyzePlaylist(url: string, context?: ExtractionContext): Promise<PlaylistInfo> {
+    const logger = getLogger();
+    const args = ['--flat-playlist', '--dump-single-json', '--no-warnings', '--skip-download'];
+    if (context?.cookiesFilePath) args.push('--cookies', context.cookiesFilePath);
+    if (context?.userAgent) args.push('--user-agent', context.userAgent);
+    if (context?.referer) args.push('--referer', context.referer);
+    args.push(url);
+
+    return new Promise<PlaylistInfo>((resolve, reject) => {
+      const child = spawnSafe(this.binaryPath, args);
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf-8')));
+      child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf-8')));
+
+      child.on('error', (err) => {
+        reject(new AnalysisFailure('unknown', `No se pudo ejecutar yt-dlp: ${err.message}`));
+      });
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          logger.warn('ytDlpAdapter', 'yt-dlp playlist exited with error', { code, stderr: stderr.slice(0, 300) });
+          reject(classifyStderr(stderr));
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stdout.trim()) as RawPlaylistJson;
+          const playlist = parsePlaylistJson(parsed, url);
+          if (playlist.entries.length === 0) {
+            reject(new AnalysisFailure('unsupported_site', 'La playlist no contiene videos descargables.'));
+            return;
+          }
+          resolve(playlist);
+        } catch (err) {
+          reject(new AnalysisFailure('unknown', `Respuesta de playlist no válida: ${(err as Error).message}`));
+        }
+      });
+    });
+  }
+}
+
+interface RawPlaylistEntry {
+  id?: string;
+  title?: string;
+  url?: string;
+  webpage_url?: string;
+  duration?: number;
+  uploader?: string;
+  channel?: string;
+  thumbnails?: { url?: string }[];
+  thumbnail?: string;
+}
+
+export interface RawPlaylistJson {
+  id?: string;
+  title?: string;
+  uploader?: string;
+  channel?: string;
+  webpage_url?: string;
+  entries?: (RawPlaylistEntry | null)[];
+}
+
+export function parsePlaylistJson(raw: RawPlaylistJson, originalUrl: string): PlaylistInfo {
+  const entries: PlaylistEntry[] = [];
+  for (const item of raw.entries ?? []) {
+    if (!item) continue;
+    const entryUrl = item.webpage_url ?? item.url;
+    if (!entryUrl) continue;
+    const resolvedUrl = entryUrl.startsWith('http')
+      ? entryUrl
+      : `https://www.youtube.com/watch?v=${entryUrl}`;
+    entries.push({
+      id: item.id ?? resolvedUrl,
+      title: item.title?.trim() || 'Video sin título',
+      url: resolvedUrl,
+      durationSeconds: typeof item.duration === 'number' ? item.duration : undefined,
+      thumbnailUrl: item.thumbnail ?? item.thumbnails?.[0]?.url,
+      author: item.uploader ?? item.channel,
+    });
+  }
+
+  return {
+    id: raw.id,
+    title: raw.title?.trim() || 'Lista de reproducción',
+    author: raw.uploader ?? raw.channel,
+    originalUrl: raw.webpage_url ?? originalUrl,
+    entries,
+  };
 }

@@ -1,9 +1,12 @@
-import type { MediaInfo, AnalysisError, AnalysisOptions } from '../../../shared/media-types';
+import type { MediaInfo, PlaylistInfo, AnalysisError, AnalysisOptions } from '../../../shared/media-types';
 import { isHttpUrl } from '../security/paths';
 import { AnalysisFailure, type ExtractionContext, type ExtractionStrategy } from './types';
+import { YtDlpAdapter } from './ytDlpAdapter';
+import { GenericPlaylistExtractor } from './genericPlaylistExtractor';
 import { getLogger } from '../logging/logger';
 
 export type AnalyzeResult = { ok: true; data: MediaInfo } | { ok: false; error: AnalysisError };
+export type AnalyzePlaylistResult = { ok: true; data: PlaylistInfo } | { ok: false; error: AnalysisError };
 
 export type ExtractionContextProvider = () => Promise<{
   context: ExtractionContext;
@@ -68,6 +71,49 @@ export class MediaAnalyzer {
           suggestion: lastFailure?.suggestion,
         },
       };
+    } finally {
+      provided?.cleanup();
+    }
+  }
+
+  async analyzePlaylist(url: string, options?: AnalysisOptions): Promise<AnalyzePlaylistResult> {
+    if (!isHttpUrl(url)) {
+      return { ok: false, error: { code: 'invalid_url', message: 'La URL no es válida.' } };
+    }
+
+    const ytDlp = this.strategies.find((s): s is YtDlpAdapter => s instanceof YtDlpAdapter);
+    const genericPlaylist = new GenericPlaylistExtractor();
+    const logger = getLogger();
+
+    let provided: { context: ExtractionContext; cleanup: () => void } | undefined;
+    try {
+      provided = this.contextProvider ? await this.contextProvider() : undefined;
+      const context: ExtractionContext = {
+        ...provided?.context,
+        referer: options?.referer ?? provided?.context.referer,
+      };
+
+      if (ytDlp) {
+        try {
+          const data = await ytDlp.analyzePlaylist(url, context);
+          return { ok: true, data };
+        } catch (err) {
+          logger.info('mediaAnalyzer', 'yt-dlp playlist failed, trying generic HTML playlist fallback', {
+            error: (err as Error).message,
+          });
+        }
+      }
+
+      const fallbackData = await genericPlaylist.analyzePlaylist(url, context);
+      return { ok: true, data: fallbackData };
+    } catch (err) {
+      if (err instanceof AnalysisFailure) {
+        return {
+          ok: false,
+          error: { code: err.code, message: err.message, suggestion: err.suggestion },
+        };
+      }
+      return { ok: false, error: { code: 'unknown', message: (err as Error).message } };
     } finally {
       provided?.cleanup();
     }

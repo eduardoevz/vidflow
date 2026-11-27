@@ -26,4 +26,16 @@ export function registerAnalyzeIpc(ctx: IpcContext): void {
     }
     return result;
   });
+
+  ipcMain.handle(IPC_CHANNELS.analyzePlaylist, async (_event, rawUrl: unknown, rawOptions?: unknown) => {
+    const parsed = urlSchema.safeParse(rawUrl);
+    if (!parsed.success) {
+      return { ok: false, error: { code: 'invalid_url', message: 'La URL no es válida.' } };
+    }
+    const parsedOptions = optionsSchema.safeParse(rawOptions);
+    return ctx.mediaAnalyzer.analyzePlaylist(
+      parsed.data,
+      parsedOptions.success ? parsedOptions.data : undefined,
+    );
+  });
 }
