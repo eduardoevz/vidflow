@@ -104,7 +104,7 @@ async function main(): Promise<void> {
   const subscriptionsRepo = new SubscriptionsRepo(db);
   const settingsService = new SettingsService(settingsRepo);
   const historyFileService = new HistoryFileService(historyRepo, mediaItemsRepo);
-  const updateService = new UpdateService('v2');
+  const updateService = new UpdateService('v3');
 
   protocol.handle('vidflow-media', (request) => {
     try {
