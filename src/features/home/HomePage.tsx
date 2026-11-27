@@ -11,14 +11,19 @@ const URL_PATTERN = /^https?:\/\/\S+$/i;
 export function HomePage(): JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
-  const [externalTarget, setExternalTarget] = useState<{ url: string; referer?: string } | undefined>(undefined);
+  const [externalTarget, setExternalTarget] = useState<
+    { url: string; referer?: string; asPlaylist?: boolean } | undefined
+  >(undefined);
   const [clipboardCandidate, setClipboardCandidate] = useState<string | undefined>(undefined);
   const [dismissedClipboard, setDismissedClipboard] = useState<string | undefined>(undefined);
   const detectClipboard = useSettingsStore((s) => s.settings.detectClipboard);
 
   useEffect(() => {
-    const navState = location.state as { analyzeUrl?: string; referer?: string } | null;
-    if (navState?.analyzeUrl && URL_PATTERN.test(navState.analyzeUrl)) {
+    const navState = location.state as { analyzeUrl?: string; playlistUrl?: string; referer?: string } | null;
+    if (navState?.playlistUrl && URL_PATTERN.test(navState.playlistUrl)) {
+      setExternalTarget({ url: navState.playlistUrl, referer: navState.referer, asPlaylist: true });
+      void navigate('.', { replace: true, state: null });
+    } else if (navState?.analyzeUrl && URL_PATTERN.test(navState.analyzeUrl)) {
       setExternalTarget({ url: navState.analyzeUrl, referer: navState.referer });
       void navigate('.', { replace: true, state: null });
     }
@@ -62,6 +67,7 @@ export function HomePage(): JSX.Element {
         title="Pega el enlace de un video"
         externalUrl={externalTarget?.url}
         externalReferer={externalTarget?.referer}
+        externalAsPlaylist={externalTarget?.asPlaylist}
         emptyFallback={
           <EmptyState
             icon={<Film size={28} />}

@@ -25,6 +25,20 @@ export function registerBrowserIpc(browser: BrowserViewController): void {
     if (visible) browser.show();
     else browser.hide();
   });
+  ipcMain.handle(IPC_CHANNELS.browserCreateTab, (_event, rawUrl?: unknown) => {
+    const url = rawUrl ? z.string().url().parse(rawUrl) : undefined;
+    return browser.createTab(url);
+  });
+  ipcMain.handle(IPC_CHANNELS.browserSwitchTab, (_event, rawId: unknown) => {
+    browser.switchTab(z.string().min(1).parse(rawId));
+  });
+  ipcMain.handle(IPC_CHANNELS.browserCloseTab, (_event, rawId: unknown) => {
+    browser.closeTab(z.string().min(1).parse(rawId));
+  });
+  ipcMain.handle(IPC_CHANNELS.browserUpdateAdBlockLists, async () => {
+    const count = await browser.updateFilterLists();
+    return { count };
+  });
   ipcMain.handle(IPC_CHANNELS.browserGetDetectedMedia, () => browser.getDetectedMedia());
   ipcMain.handle(IPC_CHANNELS.browserClearDetectedMedia, () => browser.clearDetectedMedia());
 }

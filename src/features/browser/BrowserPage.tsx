@@ -8,10 +8,15 @@ import {
   ExternalLink,
   Film,
   Globe,
+  ListVideo,
   PanelRightClose,
+  Plus,
   RotateCw,
   Shield,
+  ShieldOff,
+  Star,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { formatBytes, formatDuration } from '../../utils/format';
@@ -41,10 +46,20 @@ function formatOptionLabel(format: MediaFormat): string {
     .join(' · ');
 }
 
+function hostnameOf(rawUrl: string): string | undefined {
+  try {
+    return new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
 export function BrowserPage(): JSX.Element {
   const routerNavigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
-  const filenameTemplate = useSettingsStore((s) => s.settings.filenameTemplate);
+  const { settings, update: updateSettings } = useSettingsStore();
+  const filenameTemplate = settings.filenameTemplate;
+
   const [addressBar, setAddressBar] = useState('https://');
   const [detectedMedia, setDetectedMedia] = useState<DetectedBrowserMedia[]>([]);
   const [showDetected, setShowDetected] = useState(false);
@@ -105,10 +120,11 @@ export function BrowserPage(): JSX.Element {
       observer?.disconnect();
       clearInterval(interval);
     };
-  }, [updateBounds, showDetected, showSidePanel, detectedMedia.length]);
+  }, [updateBounds, showDetected, showSidePanel, detectedMedia.length, state.tabs?.length, settings.browserBookmarks.length]);
 
-  function navigate(): void {
-    const target = URL_PATTERN.test(addressBar) ? addressBar : `https://${addressBar}`;
+  function navigate(targetOverride?: string): void {
+    const raw = targetOverride ?? addressBar;
+    const target = URL_PATTERN.test(raw) ? raw : `https://${raw}`;
     void window.vidflow.browserNavigate(target);
   }
 
@@ -136,7 +152,6 @@ export function BrowserPage(): JSX.Element {
       if (res.ok) {
         setPageMedia(res.data);
       } else if (!targetUrl && detectedMedia[0]) {
-        // Fallback: if page URL itself isn't supported directly, try the latest sniffed stream
         const fallback = await window.vidflow.analyzeUrl(detectedMedia[0].url, {
           referer: detectedMedia[0].referer ?? urlToAnalyze,
         });
@@ -190,9 +205,70 @@ export function BrowserPage(): JSX.Element {
   );
 
   const canDownloadCurrentPage = URL_PATTERN.test(state.url);
+  const activeHost = hostnameOf(state.url);
+  const isSiteWhitelisted = activeHost ? settings.adBlockWhitelist.includes(activeHost) : false;
+  const isBookmarked = canDownloadCurrentPage && settings.browserBookmarks.some((b) => b.url === state.url);
+
+  function toggleWhitelist() {
+    if (!activeHost) return;
+    const next = isSiteWhitelisted
+      ? settings.adBlockWhitelist.filter((h) => h !== activeHost)
+      : [...settings.adBlockWhitelist, activeHost];
+    void updateSettings({ adBlockWhitelist: next }).then(() => void window.vidflow.browserReload());
+  }
+
+  function toggleBookmark() {
+    if (!canDownloadCurrentPage) return;
+    const activeTab = state.tabs?.find((t) => t.id === state.activeTabId);
+    const title = activeTab?.title || activeHost || state.url;
+    const next = isBookmarked
+      ? settings.browserBookmarks.filter((b) => b.url !== state.url)
+      : [...settings.browserBookmarks, { title, url: state.url }];
+    void updateSettings({ browserBookmarks: next });
+  }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col gap-3">
+    <div className="flex h-[calc(100vh-4rem)] flex-col gap-2">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-border bg-surface-raised px-2 py-1 shadow-sm">
+        {(state.tabs ?? []).map((tab) => {
+          const active = tab.id === state.activeTabId;
+          return (
+            <div
+              key={tab.id}
+              onClick={() => void window.vidflow.browserSwitchTab(tab.id)}
+              className={`group flex max-w-[190px] cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1 text-xs transition-colors ${
+                active ? 'bg-accent/15 font-semibold text-accent' : 'text-content-muted hover:bg-surface-sunken'
+              }`}
+            >
+              <span className="truncate">{tab.title || 'Nueva pestaña'}</span>
+              {(state.tabs?.length ?? 0) > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void window.vidflow.browserCloseTab(tab.id);
+                  }}
+                  className="rounded p-0.5 opacity-70 hover:bg-surface hover:opacity-100"
+                  title="Cerrar pestaña"
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => void window.vidflow.browserCreateTab()}
+          className="rounded-lg p-1.5 text-content-muted hover:bg-surface-sunken hover:text-content"
+          title="Nueva pestaña"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+
+      {/* Navigation bar */}
       <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-raised p-1.5 shadow-sm">
         <Button
           variant="ghost"
@@ -229,15 +305,35 @@ export function BrowserPage(): JSX.Element {
             onKeyDown={(e) => e.key === 'Enter' && navigate()}
             className="w-full bg-transparent text-sm text-content focus:outline-none"
           />
+          {canDownloadCurrentPage && (
+            <button
+              type="button"
+              onClick={toggleBookmark}
+              title={isBookmarked ? 'Quitar marcador' : 'Guardar marcador'}
+              className="text-content-muted hover:text-amber-400"
+            >
+              <Star size={14} className={isBookmarked ? 'fill-amber-400 text-amber-400' : ''} />
+            </button>
+          )}
         </div>
 
-        <span
-          title="Escudo activo: anuncios, rastreadores y popups bloqueados en esta página"
-          className="inline-flex items-center gap-1 rounded-card border border-amber-500/30 bg-amber-500/12 px-2.5 py-1.5 text-xs font-semibold text-amber-500"
+        <button
+          type="button"
+          onClick={toggleWhitelist}
+          title={
+            isSiteWhitelisted
+              ? `Escudo pausado en ${activeHost} (clic para activar)`
+              : `Escudo activo${activeHost ? ` en ${activeHost}` : ''}: ${state.blockedCount ?? 0} bloqueados (clic para pausar en este sitio)`
+          }
+          className={`inline-flex items-center gap-1 rounded-card border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+            isSiteWhitelisted
+              ? 'border-border bg-surface text-content-muted'
+              : 'border-amber-500/30 bg-amber-500/12 text-amber-500'
+          }`}
         >
-          <Shield size={14} />
-          {state.blockedCount ?? 0}
-        </span>
+          {isSiteWhitelisted ? <ShieldOff size={14} /> : <Shield size={14} />}
+          {isSiteWhitelisted ? 'Pausado' : state.blockedCount ?? 0}
+        </button>
 
         {detectedMedia.length > 0 && (
           <Button
@@ -260,6 +356,23 @@ export function BrowserPage(): JSX.Element {
           <ExternalLink size={16} />
         </Button>
       </div>
+
+      {/* Bookmarks bar */}
+      {settings.browserBookmarks.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 px-1">
+          {settings.browserBookmarks.map((bm) => (
+            <button
+              key={bm.url}
+              type="button"
+              onClick={() => navigate(bm.url)}
+              className="max-w-[160px] truncate rounded-md border border-border bg-surface-raised px-2 py-0.5 text-[11px] text-content-muted hover:border-accent/40 hover:text-content"
+              title={bm.url}
+            >
+              ★ {bm.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {showDetected && detectedMedia.length > 0 && (
         <div className="flex max-h-52 flex-col gap-2 overflow-y-auto rounded-xl border border-border bg-surface-raised p-3 shadow-sm">
@@ -416,14 +529,28 @@ export function BrowserPage(): JSX.Element {
       {canDownloadCurrentPage && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-surface-raised px-3 py-2 shadow-sm">
           <span className="truncate text-xs text-content-muted">{state.url}</span>
-          <Button
-            onClick={() => void openQuickDownload()}
-            disabled={analyzingPage}
-            title="Analizar y descargar video de la página actual"
-          >
-            <Download size={15} />
-            {analyzingPage ? 'Analizando...' : 'Descargar video de esta página'}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void routerNavigate('/', {
+                  state: { playlistUrl: state.url, referer: state.url },
+                })
+              }
+              title="Extraer todos los videos de esta página o playlist"
+            >
+              <ListVideo size={15} />
+              Extraer lista
+            </Button>
+            <Button
+              onClick={() => void openQuickDownload()}
+              disabled={analyzingPage}
+              title="Analizar y descargar video de la página actual"
+            >
+              <Download size={15} />
+              {analyzingPage ? 'Analizando...' : 'Descargar video de esta página'}
+            </Button>
+          </div>
         </div>
       )}
     </div>

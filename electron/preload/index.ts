@@ -24,6 +24,7 @@ const api: VidFlowApi = {
   removeFromHistory: (id) => ipcRenderer.invoke(IPC_CHANNELS.removeFromHistory, id),
   deleteHistoryFile: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteHistoryFile, id),
   clearHistory: () => ipcRenderer.invoke(IPC_CHANNELS.clearHistory),
+  convertHistoryFile: (id, profile) => ipcRenderer.invoke(IPC_CHANNELS.convertHistoryFile, id, profile),
   openInFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.openInFolder, path),
   openFile: (path) => ipcRenderer.invoke(IPC_CHANNELS.openFile, path),
   openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
@@ -37,6 +38,15 @@ const api: VidFlowApi = {
   getEngineVersions: () => ipcRenderer.invoke(IPC_CHANNELS.getEngineVersions),
   checkForEngineUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.checkForEngineUpdates),
   updateYtDlp: () => ipcRenderer.invoke(IPC_CHANNELS.updateYtDlp),
+  checkAppUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.checkAppUpdate),
+  installWhisper: () => ipcRenderer.invoke(IPC_CHANNELS.installWhisper),
+  transcribeHistoryFile: (id) => ipcRenderer.invoke(IPC_CHANNELS.transcribeHistoryFile, id),
+
+  listSubscriptions: () => ipcRenderer.invoke(IPC_CHANNELS.listSubscriptions),
+  addSubscription: (url, preset) => ipcRenderer.invoke(IPC_CHANNELS.addSubscription, url, preset),
+  removeSubscription: (id) => ipcRenderer.invoke(IPC_CHANNELS.removeSubscription, id),
+  toggleSubscription: (id, enabled) => ipcRenderer.invoke(IPC_CHANNELS.toggleSubscription, id, enabled),
+  checkSubscriptionsNow: () => ipcRenderer.invoke(IPC_CHANNELS.checkSubscriptionsNow),
 
   browserNavigate: (url) => ipcRenderer.invoke(IPC_CHANNELS.browserNavigate, url),
   browserBack: () => ipcRenderer.invoke(IPC_CHANNELS.browserBack),
@@ -44,6 +54,10 @@ const api: VidFlowApi = {
   browserReload: () => ipcRenderer.invoke(IPC_CHANNELS.browserReload),
   browserSetBounds: (bounds) => ipcRenderer.invoke(IPC_CHANNELS.browserSetBounds, bounds),
   browserSetVisible: (visible) => ipcRenderer.invoke(IPC_CHANNELS.browserSetVisible, visible),
+  browserCreateTab: (url) => ipcRenderer.invoke(IPC_CHANNELS.browserCreateTab, url),
+  browserSwitchTab: (tabId) => ipcRenderer.invoke(IPC_CHANNELS.browserSwitchTab, tabId),
+  browserCloseTab: (tabId) => ipcRenderer.invoke(IPC_CHANNELS.browserCloseTab, tabId),
+  browserUpdateAdBlockLists: () => ipcRenderer.invoke(IPC_CHANNELS.browserUpdateAdBlockLists),
   onBrowserNavigationState: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) =>
       callback(state);

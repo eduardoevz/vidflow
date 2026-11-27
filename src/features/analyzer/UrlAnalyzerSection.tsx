@@ -24,6 +24,7 @@ interface UrlAnalyzerSectionProps {
   title: string;
   externalUrl?: string;
   externalReferer?: string;
+  externalAsPlaylist?: boolean;
   onDownloadStarted?: () => void;
   emptyFallback?: JSX.Element;
 }
@@ -32,6 +33,7 @@ export function UrlAnalyzerSection({
   title,
   externalUrl,
   externalReferer,
+  externalAsPlaylist,
   onDownloadStarted,
   emptyFallback,
 }: UrlAnalyzerSectionProps): JSX.Element {
@@ -48,9 +50,14 @@ export function UrlAnalyzerSection({
       setReferer(externalReferer);
       setPlaylist(undefined);
       setPlaylistError(undefined);
-      void analyze(externalUrl, externalReferer ? { referer: externalReferer } : undefined);
+      if (externalAsPlaylist) {
+        void analyzeAsPlaylist(externalUrl);
+      } else {
+        void analyze(externalUrl, externalReferer ? { referer: externalReferer } : undefined);
+      }
     }
-  }, [externalUrl, externalReferer, analyze]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalUrl, externalReferer, externalAsPlaylist, analyze]);
 
   async function analyzeAsPlaylist(targetUrl: string) {
     reset();

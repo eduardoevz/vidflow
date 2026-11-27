@@ -33,12 +33,21 @@ export interface EngineVersions {
   aria2?: string;
 }
 
+export interface BrowserTabInfo {
+  id: string;
+  title: string;
+  url: string;
+  isLoading: boolean;
+}
+
 export interface BrowserNavigationState {
   url: string;
   canGoBack: boolean;
   canGoForward: boolean;
   isLoading: boolean;
   blockedCount?: number;
+  activeTabId?: string;
+  tabs?: BrowserTabInfo[];
 }
 
 export interface BrowserBounds {
@@ -66,6 +75,25 @@ export interface ExtensionCapturedMedia {
 }
 
 /** Single source of truth for every channel exposed on window.vidflow. */
+export type ConvertProfile = 'mp3' | 'mp4_compact' | 'gif';
+
+export interface SubscriptionItem {
+  id: number;
+  url: string;
+  title: string;
+  preset: string;
+  seenUrls: string[];
+  enabled: boolean;
+  lastCheckedAt?: string;
+  createdAt: string;
+}
+
+export interface AppUpdateInfo {
+  updateAvailable: boolean;
+  latestVersion?: string;
+  releaseUrl?: string;
+}
+
 export interface VidFlowApi {
   analyzeUrl(
     url: string,
@@ -89,6 +117,7 @@ export interface VidFlowApi {
   removeFromHistory(id: number): Promise<void>;
   deleteHistoryFile(id: number): Promise<void>;
   clearHistory(): Promise<void>;
+  convertHistoryFile(id: number, profile: ConvertProfile): Promise<{ outputPath: string }>;
   openInFolder(path: string): Promise<void>;
   openFile(path: string): Promise<void>;
   openExternal(url: string): Promise<void>;
@@ -102,6 +131,15 @@ export interface VidFlowApi {
   getEngineVersions(): Promise<EngineVersions>;
   checkForEngineUpdates(): Promise<{ ytDlpUpdateAvailable: boolean }>;
   updateYtDlp(): Promise<void>;
+  checkAppUpdate(): Promise<AppUpdateInfo>;
+  installWhisper(): Promise<{ installed: boolean }>;
+  transcribeHistoryFile(id: number): Promise<{ srtPath: string }>;
+
+  listSubscriptions(): Promise<SubscriptionItem[]>;
+  addSubscription(url: string, preset?: string): Promise<SubscriptionItem>;
+  removeSubscription(id: number): Promise<void>;
+  toggleSubscription(id: number, enabled: boolean): Promise<void>;
+  checkSubscriptionsNow(): Promise<{ checked: number; queued: number }>;
 
   browserNavigate(url: string): Promise<void>;
   browserBack(): Promise<void>;
@@ -109,6 +147,10 @@ export interface VidFlowApi {
   browserReload(): Promise<void>;
   browserSetBounds(bounds: BrowserBounds): Promise<void>;
   browserSetVisible(visible: boolean): Promise<void>;
+  browserCreateTab(url?: string): Promise<string>;
+  browserSwitchTab(tabId: string): Promise<void>;
+  browserCloseTab(tabId: string): Promise<void>;
+  browserUpdateAdBlockLists(): Promise<{ count: number }>;
   onBrowserNavigationState(callback: (state: BrowserNavigationState) => void): () => void;
   browserGetDetectedMedia(): Promise<DetectedBrowserMedia[]>;
   browserClearDetectedMedia(): Promise<void>;
