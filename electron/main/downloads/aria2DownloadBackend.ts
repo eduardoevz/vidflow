@@ -18,6 +18,7 @@ export interface Aria2DownloadOptions {
   userAgent?: string;
   referer?: string;
   cookie?: string;
+  maxSpeedKbps?: number;
 }
 
 /** Multi-connection download via aria2c for the generic/manifest (non-yt-dlp) direct-URL path. */
@@ -40,6 +41,9 @@ export function startAria2Download(
   if (options.userAgent) args.push(`--user-agent=${options.userAgent}`);
   if (options.referer) args.push(`--header=Referer: ${options.referer}`);
   if (options.cookie) args.push(`--header=Cookie: ${options.cookie}`);
+  if (options.maxSpeedKbps && options.maxSpeedKbps > 0) {
+    args.push(`--max-download-limit=${options.maxSpeedKbps}K`);
+  }
 
   args.push(options.url);
 

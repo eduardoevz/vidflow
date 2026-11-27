@@ -23,6 +23,7 @@ interface Task {
   destinationPath: string;
   handle?: RunningDownload | HttpDownloadHandle | Aria2DownloadHandle;
   lastEmitAt: number;
+  renewedUrlAttempted?: boolean;
 }
 
 export interface DownloadManagerDeps {
@@ -35,8 +36,11 @@ export interface DownloadManagerDeps {
   getFfmpegPath: () => string;
   getDownloadEngine: () => DownloadEngine;
   getConnectionsPerDownload: () => number;
+  getMaxDownloadSpeedKbps?: () => number;
   /** undefined when aria2 isn't installed/available — callers must fall back to yt-dlp native. */
   getAria2Path: () => string | undefined;
+  reanalyzeUrl?: (originalUrl: string, referer?: string) => Promise<string | undefined>;
+  onQueueCompleted?: () => void;
   prepareSessionContext?: (targetUrl: string) => Promise<{
     cookiesFilePath?: string;
     cookieHeader?: string;
@@ -52,6 +56,7 @@ export class DownloadManager {
   private readonly tasks = new Map<string, Task>();
   private readonly queue: string[] = [];
   private activeCount = 0;
+  private completedInBatch = 0;
 
   constructor(private readonly deps: DownloadManagerDeps) {}
 
@@ -74,6 +79,7 @@ export class DownloadManager {
 
     const filenameBase = renderFilenameTemplate(request.filenameTemplate, {
       title: request.title,
+      site: request.source,
       resolution: request.resolutionLabel,
     });
     const destinationPath = resolveCollisionFreePath(
@@ -81,6 +87,7 @@ export class DownloadManager {
       filenameBase,
       request.extension,
     );
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
 
     // The DB download id doubles as the task id, so persisted DownloadRecord.id
     // and in-memory progress events always refer to the same identifier —
@@ -112,6 +119,10 @@ export class DownloadManager {
       void this.runTask(task).finally(() => {
         this.activeCount -= 1;
         this.pump();
+        if (this.activeCount === 0 && this.queue.length === 0 && this.completedInBatch > 0) {
+          this.completedInBatch = 0;
+          this.deps.onQueueCompleted?.();
+        }
       });
     }
   }
@@ -185,6 +196,7 @@ export class DownloadManager {
             writeSubtitles: task.request.writeSubtitles,
             clipRange: task.request.clipRange,
             sponsorBlockCategories: task.request.sponsorBlockCategories,
+            maxSpeedKbps: this.deps.getMaxDownloadSpeedKbps?.(),
             externalDownloader: aria2Path
               ? { path: aria2Path, connections: this.deps.getConnectionsPerDownload() }
               : undefined,
@@ -246,6 +258,7 @@ export class DownloadManager {
                 userAgent: sessionCtx?.userAgent,
                 referer: task.request.referer,
                 cookie: sessionCtx?.cookieHeader,
+                maxSpeedKbps: this.deps.getMaxDownloadSpeedKbps?.(),
               },
               { onProgress: onHttpProgress },
             )
@@ -287,6 +300,7 @@ export class DownloadManager {
 
       task.status = 'completed';
       task.progressPercent = 100;
+      this.completedInBatch += 1;
       this.deps.downloadsRepo.markCompleted(task.downloadId, task.destinationPath);
       const download = this.deps.downloadsRepo.findById(task.downloadId);
       if (download) {
@@ -312,6 +326,26 @@ export class DownloadManager {
       }
 
       const message = (err as Error).message;
+      const isExpiredLink = /\b(403|410)\b|expired|forbidden/i.test(message);
+      if (
+        isExpiredLink &&
+        !task.request.useYtDlp &&
+        !task.renewedUrlAttempted &&
+        this.deps.reanalyzeUrl
+      ) {
+        task.renewedUrlAttempted = true;
+        const freshUrl = await this.deps
+          .reanalyzeUrl(task.request.originalUrl, task.request.referer)
+          .catch(() => undefined);
+        if (freshUrl) {
+          logger.info('downloadManager', 'Renewed expired download URL, retrying', { taskId: task.id });
+          task.request = { ...task.request, downloadUrl: freshUrl };
+          task.status = 'queued';
+          this.queue.unshift(task.id);
+          return;
+        }
+      }
+
       if (message === 'cancelled') {
         task.status = 'cancelled';
         this.deps.downloadsRepo.updateProgress(task.downloadId, 'cancelled', task.progressPercent);

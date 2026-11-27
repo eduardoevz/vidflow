@@ -56,4 +56,13 @@ describe('buildYtDlpDownloadArgs', () => {
     expect(args).toContain('--sponsorblock-remove');
     expect(args[args.indexOf('--sponsorblock-remove') + 1]).toBe('sponsor,selfpromo');
   });
+
+  it('adds --limit-rate when maxSpeedKbps is set', () => {
+    const args = buildYtDlpDownloadArgs({
+      ...BASE_OPTS,
+      maxSpeedKbps: 2048,
+    });
+    expect(args).toContain('--limit-rate');
+    expect(args[args.indexOf('--limit-rate') + 1]).toBe('2048K');
+  });
 });

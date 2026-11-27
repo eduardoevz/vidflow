@@ -33,6 +33,7 @@ export interface YtDlpDownloadOptions {
   writeSubtitles?: boolean;
   clipRange?: ClipRange;
   sponsorBlockCategories?: string[];
+  maxSpeedKbps?: number;
 }
 
 export function buildYtDlpDownloadArgs(options: YtDlpDownloadOptions): string[] {
@@ -69,6 +70,10 @@ export function buildYtDlpDownloadArgs(options: YtDlpDownloadOptions): string[] 
 
   if (options.sponsorBlockCategories && options.sponsorBlockCategories.length > 0) {
     args.push('--sponsorblock-remove', options.sponsorBlockCategories.join(','));
+  }
+
+  if (options.maxSpeedKbps && options.maxSpeedKbps > 0) {
+    args.push('--limit-rate', `${options.maxSpeedKbps}K`);
   }
 
   args.push(options.url);

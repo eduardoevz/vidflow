@@ -25,6 +25,17 @@ const settingsPatchSchema = z
     extensionBridgeEnabled: z.boolean().optional(),
     extensionBridgePort: z.number().int().min(1024).max(65535).optional(),
     extensionBridgeToken: z.string().optional(),
+    maxDownloadSpeedKbps: z.number().int().min(0).max(10_000_000).optional(),
+    postQueueAction: z.enum(['none', 'sleep', 'shutdown']).optional(),
+    adBlockWhitelist: z.array(z.string().min(1)).optional(),
+    browserBookmarks: z
+      .array(
+        z.object({
+          title: z.string().min(1),
+          url: z.string().url(),
+        }),
+      )
+      .optional(),
     closeBehavior: z.enum(['ask', 'minimize', 'quit']).optional(),
   })
   .strict();

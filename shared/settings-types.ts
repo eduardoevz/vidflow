@@ -1,6 +1,12 @@
 export type Theme = 'light' | 'dark' | 'system';
 export type CloseBehavior = 'ask' | 'minimize' | 'quit';
 export type DownloadEngine = 'ytdlp' | 'aria2';
+export type PostQueueAction = 'none' | 'sleep' | 'shutdown';
+
+export interface BrowserBookmark {
+  title: string;
+  url: string;
+}
 
 export interface AppSettings {
   theme: Theme;
@@ -27,6 +33,11 @@ export interface AppSettings {
   extensionBridgeEnabled: boolean;
   extensionBridgePort: number;
   extensionBridgeToken: string;
+
+  maxDownloadSpeedKbps: number;
+  postQueueAction: PostQueueAction;
+  adBlockWhitelist: string[];
+  browserBookmarks: BrowserBookmark[];
 
   closeBehavior: CloseBehavior;
 }
@@ -56,6 +67,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   extensionBridgeEnabled: true,
   extensionBridgePort: 47832,
   extensionBridgeToken: '',
+
+  maxDownloadSpeedKbps: 0,
+  postQueueAction: 'none',
+  adBlockWhitelist: [],
+  browserBookmarks: [],
 
   closeBehavior: 'ask',
 };

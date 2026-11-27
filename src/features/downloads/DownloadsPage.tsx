@@ -1,13 +1,25 @@
 import { useEffect } from 'react';
-import { DownloadCloud, Trash2 } from 'lucide-react';
+import { DownloadCloud, Gauge, Power, Trash2 } from 'lucide-react';
 import { useDownloadsStore } from '../../stores/downloadsStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { DownloadItemCard } from './DownloadItemCard';
 import { EmptyState } from '../../components/EmptyState';
 import { Button } from '../../components/Button';
 import { UrlAnalyzerSection } from '../analyzer/UrlAnalyzerSection';
+import type { PostQueueAction } from '../../../shared/settings-types';
+
+const SPEED_LIMIT_OPTIONS = [
+  { value: 0, label: 'Velocidad: Ilimitada' },
+  { value: 512, label: 'Límite: 512 KB/s' },
+  { value: 1024, label: 'Límite: 1 MB/s' },
+  { value: 2048, label: 'Límite: 2 MB/s' },
+  { value: 5120, label: 'Límite: 5 MB/s' },
+  { value: 10240, label: 'Límite: 10 MB/s' },
+];
 
 export function DownloadsPage(): JSX.Element {
   const { records, liveProgress, refresh, subscribe } = useDownloadsStore();
+  const { settings, update } = useSettingsStore();
 
   useEffect(() => {
     void refresh();
@@ -40,20 +52,48 @@ export function DownloadsPage(): JSX.Element {
               </span>
             )}
           </div>
-          {failedRecords.length > 0 && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                void Promise.all(
-                  failedRecords.map((r) => window.vidflow.dismissDownload(String(r.id))),
-                ).then(() => void refresh());
-              }}
-              className="text-xs"
-            >
-              <Trash2 size={14} />
-              Limpiar fallidas
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 rounded-card border border-border bg-surface-raised px-2.5 py-1 text-xs text-content-muted">
+              <Gauge size={13} className="text-accent" />
+              <select
+                value={settings.maxDownloadSpeedKbps}
+                onChange={(e) => void update({ maxDownloadSpeedKbps: Number(e.target.value) })}
+                className="bg-transparent text-xs text-content focus:outline-none"
+              >
+                {SPEED_LIMIT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="inline-flex items-center gap-1.5 rounded-card border border-border bg-surface-raised px-2.5 py-1 text-xs text-content-muted">
+              <Power size={13} className="text-accent" />
+              <select
+                value={settings.postQueueAction}
+                onChange={(e) => void update({ postQueueAction: e.target.value as PostQueueAction })}
+                className="bg-transparent text-xs text-content focus:outline-none"
+              >
+                <option value="none">Al terminar: Nada</option>
+                <option value="sleep">Al terminar: Suspender PC</option>
+                <option value="shutdown">Al terminar: Apagar PC</option>
+              </select>
+            </label>
+            {failedRecords.length > 0 && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  void Promise.all(
+                    failedRecords.map((r) => window.vidflow.dismissDownload(String(r.id))),
+                  ).then(() => void refresh());
+                }}
+                className="text-xs"
+              >
+                <Trash2 size={14} />
+                Limpiar fallidas
+              </Button>
+            )}
+          </div>
         </div>
 
         {sorted.length === 0 ? (
